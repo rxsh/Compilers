@@ -1,0 +1,15 @@
+# Terminales
+TERMINALES: id + * ()
+
+# No terminales
+NO_TERMINALES: S E T F
+
+# Simbolo inicial
+INICIAL: S
+
+# Producciones
+PRODUCCIONES:
+S -> E
+E -> E + T | T
+T -> T * F | F
+F -> ( E ) | id

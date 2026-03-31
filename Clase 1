@@ -1,0 +1,29 @@
+FrontEnd 		Optimizer		BackEnd
+-> Scanner
+	|
+  Parser
+	|
+  Semantica
+
+
+Tokenizar: Darle su categoria sintactica a una palabra.
+
+ab -> Concatenacion
+a|b -> Seleccion
+a*	-> 0 o mas veces
+
+Una cadena que termina en ab
+(a|b)* ab
+(a|b)*aa(a|b)*
+
+[a-zA-Z][a-zA-Z0-9]*
+[0-9][0-9]* -> ENTEROS
+[0-9][0-9]*.[0-9]* -> DECIMAL
+
+<id>|<int>|<float>|+|*
+
+Construccion de thompson
+
+Single-Letter RE Template:
+
+ Esta pensado para hacer automatico
