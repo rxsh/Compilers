@@ -55,6 +55,84 @@ def leer_gramatica(ruta):
 
     return terminales, no_terminales, inicial, producciones
 
+def calcular_first(terminales, no_terminales, producciones):
+
+    EPSILON = "ε"
+    EOF = "$"
+    
+    first = {}
+
+    for t in terminales + [EOF, EPSILON]:
+        first[t] = {t}
+
+    for nt in no_terminales:
+        first[nt] = set()
+
+    cambio = True
+    while cambio:
+        cambio = False
+
+        for A,B in producciones:
+            rhs = set()
+            i = 0
+
+            while i < len(B):
+                simbolo = B[i]
+                rhs.update(first[simbolo] - {EPSILON})
+
+                if EPSILON in first[simbolo]:
+                    i += 1
+                else:
+                    break
+
+            if i == len(B):
+                rhs.add(EPSILON)
+
+            antes = len(first[A])
+            first[A].update(rhs)
+            if len(first[A]) > antes:
+                cambio = True
+
+    return first
+
+def calcular_follow(no_terminales, producciones, inicial, first):
+
+    EPSILON = "ε"
+    EOF = "$"
+
+    follow = {}
+
+    for A in no_terminales:
+        follow[A] = set()
+
+    follow[inicial].add(EOF)
+
+    cambio = True
+    while cambio:
+        cambio = False
+
+        for A,B in producciones:
+            trailer = follow[A].copy()
+
+            for i in range(len(B) - 1, -1, -1):
+                simbolo = B[i]
+
+                if simbolo in no_terminales:
+                    antes = len(follow[simbolo])
+                    follow[simbolo].update(trailer)
+                    if len(follow[simbolo]) > antes:
+                        cambio = True
+
+                    if EPSILON in first[simbolo]:
+                        trailer = trailer.union(first[simbolo] - {EPSILON})
+                    else:
+                        trailer = first[simbolo].copy()
+                else:
+                    trailer = first[simbolo].copy()
+
+
+    return follow
+
 
 
 if __name__ == "__main__":
@@ -66,3 +144,16 @@ if __name__ == "__main__":
     print("Producciones: ")
     for p in producciones:
         print(p)
+
+
+    print("----------------")
+    first = calcular_first(terminales, no_terminales, producciones)
+    follow = calcular_follow(no_terminales, producciones, inicial, first)
+    
+    print("FIRST:")
+    for simbolo in first:
+        print(simbolo, "=", first[simbolo])
+
+    print("\nFOLLOW:")
+    for simbolo in follow:
+        print(simbolo, "=", follow[simbolo])

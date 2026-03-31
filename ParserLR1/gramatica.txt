@@ -1,8 +1,8 @@
 # Terminales
-TERMINALES: id + * ()
+TERMINALES: id + * ( ) ε
 
 # No terminales
-NO_TERMINALES: S E T F
+NO_TERMINALES: S E Ep T Tp F
 
 # Simbolo inicial
 INICIAL: S
@@ -10,6 +10,8 @@ INICIAL: S
 # Producciones
 PRODUCCIONES:
 S -> E
-E -> E + T | T
-T -> T * F | F
+E -> T Ep
+Ep -> + T Ep | ε
+T -> F Tp
+Tp -> * F Tp | ε
 F -> ( E ) | id
