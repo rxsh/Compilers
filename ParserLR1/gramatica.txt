@@ -1,5 +1,5 @@
 # Terminales
-TERMINALES: id + * ( ) ε
+TERMINALES: id + * ( )
 
 # No terminales
 NO_TERMINALES: S E Ep T Tp F
