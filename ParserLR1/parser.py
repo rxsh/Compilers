@@ -199,6 +199,11 @@ def formatear_produccion(lado_izq, lado_der):
     return f"{lado_izq} -> {' '.join(lado_der)}"
 
 
+def formatear_lookaheads(lookaheads):
+
+    return "{" + "/".join(lookaheads) + "}"
+
+
 @dataclass(frozen=True)
 class ItemLR1:
     lado_izq: str
@@ -223,6 +228,16 @@ class ItemLR1:
         if not self.lado_der:
             partes = [DOT]
         return f"{self.lado_izq} -> {' '.join(partes)}, {self.anticipacion}"
+
+    def nucleo(self):
+        return (self.lado_izq, self.lado_der, self.punto)
+
+    def texto_sin_lookahead(self):
+        partes = list(self.lado_der)
+        partes.insert(self.punto, DOT)
+        if not self.lado_der:
+            partes = [DOT]
+        return f"{self.lado_izq} -> {' '.join(partes)}"
 
     def __str__(self):
         return self.texto()
@@ -336,32 +351,51 @@ def construir_tabla_lr1(estados, transiciones, terminales, no_terminales, produc
     action = {}
     goto = {}
     conflictos = []
+    # Mapa de apoyo:
+    # (lado_izq, lado_der) -> numero de produccion
+    # Esto nos deja saber rapidamente que reduccion registrar en ACTION.
     mapa_producciones = {
         (lado_izq, tuple(lado_der)): indice
         for indice, (lado_izq, lado_der) in enumerate(producciones)
     }
 
     def registrar_accion(estado, simbolo, valor):
+        # Si una misma celda ACTION recibe dos valores distintos,
+        # guardamos el conflicto para poder reportarlo.
         clave = (estado, simbolo)
         if clave in action and action[clave] != valor:
             conflictos.append((clave, action[clave], valor))
         action[clave] = valor
 
+    # Paso 1:
+    # Las transiciones del automata llenan:
+    # - ACTION con "shift" si la transicion es con un terminal
+    # - GOTO si la transicion es con un no terminal
     for (estado, simbolo), destino in transiciones.items():
         if simbolo in terminales:
             registrar_accion(estado, simbolo, ("shift", destino))
         elif simbolo in no_terminales:
             goto[(estado, simbolo)] = destino
 
+    # Paso 2:
+    # Todo item con el punto al final produce una accion.
+    # Puede ser:
+    # - accept, si es el item inicial aumentado con lookahead $
+    # - reduce, usando el lookahead exacto del item LR(1)
     for indice_estado, estado in enumerate(estados):
         for item in estado:
             if not item.completado():
                 continue
 
+            # Caso de aceptacion:
+            # inicial_aumentado -> inicial ., $
             if item.lado_izq == inicial_aumentado and item.anticipacion == EOF:
                 registrar_accion(indice_estado, EOF, ("accept",))
                 continue
 
+            # Caso de reduccion:
+            # A -> alpha ., a
+            # entonces ACTION[estado, a] = reduce A -> alpha
             numero_produccion = mapa_producciones[(item.lado_izq, item.lado_der)]
             registrar_accion(indice_estado, item.anticipacion, ("reduce", numero_produccion))
 
@@ -386,7 +420,7 @@ def parsear_lr1(action, goto, producciones, tokens):
             "pila_estados": list(pila_estados),
             "pila_simbolos": list(pila_simbolos),
             "entrada": entrada[indice_entrada:],
-            "accion": formatear_accion(accion, producciones),
+            "accion": formatear_accion_corta(accion),
         })
 
         if accion is None:
@@ -461,6 +495,20 @@ def formatear_accion(accion, producciones):
     return "accept"
 
 
+def formatear_accion_corta(accion):
+
+    if accion is None:
+        return ""
+
+    if accion[0] == "shift":
+        return f"s{accion[1]}"
+
+    if accion[0] == "reduce":
+        return f"r{accion[1]}"
+
+    return "acc"
+
+
 def serializar_first(first):
 
     return {simbolo: sorted(list(valores)) for simbolo, valores in first.items()}
@@ -471,16 +519,38 @@ def serializar_follow(follow):
     return {simbolo: sorted(list(valores)) for simbolo, valores in follow.items()}
 
 
-def serializar_estados(estados):
+def serializar_estados(estados, simbolo_inicial_aumentado=None):
 
     resultado = []
     for indice, estado in enumerate(estados):
+        agrupados = {}
+        for item in estado:
+            clave = item.nucleo()
+            if clave not in agrupados:
+                agrupados[clave] = {
+                    "texto_base": item.texto_sin_lookahead(),
+                    "lookaheads": set(),
+                    "punto": item.punto,
+                }
+            agrupados[clave]["lookaheads"].add(item.anticipacion)
+
+        def clave_orden_item(par):
+            lhs, rhs, punto = par[0]
+            prioridad_inicial = 0 if simbolo_inicial_aumentado is not None and lhs == simbolo_inicial_aumentado else 1
+            return (prioridad_inicial, lhs, rhs, punto)
+
+        items_agrupados = []
+        for _, info in sorted(agrupados.items(), key=clave_orden_item):
+            lookaheads = sorted(info["lookaheads"])
+            items_agrupados.append({
+                "texto": f"{info['texto_base']}, {formatear_lookaheads(lookaheads)}",
+                "punto": info["punto"],
+            })
+
         resultado.append({
             "indice": indice,
-            "items": [item.texto() for item in sorted(
-                estado,
-                key=lambda x: (x.lado_izq, x.lado_der, x.punto, x.anticipacion),
-            )],
+            "items": [item["texto"] for item in items_agrupados],
+            "kernel": [item["texto"] for item in items_agrupados if item["punto"] > 0] or ["-"],
         })
 
     return resultado
@@ -510,7 +580,7 @@ def serializar_tabla(action, goto, terminales, no_terminales, total_estados, pro
         for terminal in terminales + [EOF]:
             accion = action.get((estado, terminal))
             if accion is not None:
-                fila_action[terminal] = formatear_accion(accion, producciones)
+                fila_action[terminal] = formatear_accion_corta(accion)
 
         for no_terminal in no_terminales:
             destino = goto.get((estado, no_terminal))
@@ -567,9 +637,9 @@ def construir_demo_lr1(ruta_gramatica, tokens_entrada):
                 for lado_izq, lado_der in producciones_aumentadas
             ],
         },
-        "first": serializar_first(first),
+        "first": serializar_first(first_aumentado),
         "follow": serializar_follow(follow),
-        "estados": serializar_estados(estados),
+        "estados": serializar_estados(estados, inicial_aumentado),
         "transiciones": serializar_transiciones(transiciones),
         "tabla": serializar_tabla(
             action,
@@ -583,8 +653,8 @@ def construir_demo_lr1(ruta_gramatica, tokens_entrada):
             {
                 "estado": clave[0],
                 "simbolo": clave[1],
-                "existente": formatear_accion(vieja, producciones_aumentadas),
-                "nuevo": formatear_accion(nueva, producciones_aumentadas),
+                "existente": formatear_accion_corta(vieja),
+                "nuevo": formatear_accion_corta(nueva),
             }
             for clave, vieja, nueva in conflictos
         ],
@@ -631,7 +701,7 @@ def imprimir_resumen_demo(datos):
 
 if __name__ == "__main__":
 
-    demo = construir_demo_lr1("gramatica.txt", ["id", "+", "id", "*", "id"])
+    demo = construir_demo_lr1("gramatica.txt", ["x", "x", "y", "y"])
     imprimir_resumen_demo(demo)
     print("\nJSON:")
     print(json.dumps(demo, ensure_ascii=False, indent=2))

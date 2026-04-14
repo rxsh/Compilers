@@ -52,10 +52,7 @@ function renderData(data) {
 function renderGrammar(grammar) {
   grammarInitial.textContent = grammar.inicial_aumentado || grammar.inicial || "";
 
-  const lines = [
-    ...grammar.producciones_aumentadas.map((prod, index) => `(${index}) ${prod}`)
-  ];
-
+  const lines = grammar.producciones_aumentadas.map((prod, index) => `(${index}) ${prod}`);
   grammarTextView.value = lines.join("\n");
 }
 
@@ -72,9 +69,10 @@ function renderFirstTable(first) {
 
   const tbody = document.createElement("tbody");
   Object.entries(first).forEach(([key, values]) => {
-    if (["id", "+", "*", "(", ")", "$", "ε"].includes(key)) {
+    if (["x", "y", "id", "+", "*", "(", ")", "$", "ε"].includes(key)) {
       return;
     }
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${key}</td>
@@ -82,6 +80,7 @@ function renderFirstTable(first) {
     `;
     tbody.appendChild(tr);
   });
+
   table.appendChild(tbody);
 }
 
@@ -94,9 +93,7 @@ function renderClosureTable(states, transitions) {
     if (!transitionsByState.has(transition.hacia)) {
       transitionsByState.set(transition.hacia, []);
     }
-    transitionsByState.get(transition.hacia).push(
-      `goto(${transition.desde}, ${transition.simbolo})`
-    );
+    transitionsByState.get(transition.hacia).push(`goto(${transition.desde}, ${transition.simbolo})`);
   });
 
   const thead = document.createElement("thead");
@@ -112,15 +109,14 @@ function renderClosureTable(states, transitions) {
 
   const tbody = document.createElement("tbody");
   states.forEach((state, index) => {
-    const items = state.items || [];
-    const kernel = items.filter((item) => !item.includes("-> ·"));
-    const closure = items;
+    const closure = state.items || [];
+    const kernel = state.kernel || ["-"];
     const gotos = transitionsByState.get(index) || (index === 0 ? ["start"] : []);
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${gotos.join("<br>")}</td>
-      <td class="accent-cell">${(kernel.length ? kernel : ["-"]).join("<br>")}</td>
+      <td class="accent-cell">${kernel.join("<br>")}</td>
       <td>${state.indice}</td>
       <td class="ok-cell">${closure.join("<br>")}</td>
     `;
@@ -131,6 +127,7 @@ function renderClosureTable(states, transitions) {
 
 function renderLRTable(rows) {
   const table = document.getElementById("lrTable");
+  if (!table) return; // LR table removed from UI for presentation
   table.innerHTML = "";
 
   if (!rows.length) {
@@ -155,11 +152,13 @@ function renderLRTable(rows) {
     <th colspan="${orderedActionKeys.length || 1}">ACTION</th>
     <th colspan="${orderedGotoKeys.length || 1}">GOTO</th>
   `;
+
   const headRow2 = document.createElement("tr");
   headRow2.innerHTML = `
     ${orderedActionKeys.map((key) => `<th>${key}</th>`).join("")}
     ${orderedGotoKeys.map((key) => `<th>${key}</th>`).join("")}
   `;
+
   thead.appendChild(headRow);
   thead.appendChild(headRow2);
   table.appendChild(thead);

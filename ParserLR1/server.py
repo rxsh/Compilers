@@ -34,7 +34,7 @@ class LR1RequestHandler(BaseHTTPRequestHandler):
 
     def handle_demo(self):
         try:
-            datos = construir_demo_lr1(str(GRAMMAR_FILE), ["id", "+", "id", "*", "id"])
+            datos = construir_demo_lr1(str(GRAMMAR_FILE), ["x", "x", "y", "y"])
             self.send_json(datos)
         except Exception as exc:
             self.send_json({"error": str(exc)}, status=500)
