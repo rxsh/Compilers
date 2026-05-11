@@ -22,49 +22,143 @@ def tokenizar_lista(texto):
 
 def leer_gramatica(ruta):
 
+    with open(ruta, "r", encoding="UTF-8") as f:
+        return leer_gramatica_desde_texto(f.read())
+
+
+def leer_gramatica_desde_texto(texto):
+
     producciones = []
     terminales = []
     no_terminales = []
     inicial = None
     en_producciones = False
+    usa_secciones = False
 
-    with open(ruta, "r", encoding="UTF-8") as f:
-        for linea in f:
-            linea = linea.strip()
-            if not linea or linea.startswith("#"):
-                continue
+    for numero_linea, linea in enumerate(texto.splitlines(), start=1):
+        linea = linea.strip()
+        if not linea or linea.startswith("#"):
+            continue
 
-            if linea.startswith("TERMINALES:"):
-                datos = linea.split(":", 1)[1].strip()
-                terminales = tokenizar_lista(datos)
-                en_producciones = False
-                continue
+        if linea.startswith("TERMINALES:"):
+            usa_secciones = True
+            datos = linea.split(":", 1)[1].strip()
+            terminales = tokenizar_lista(datos)
+            en_producciones = False
+            continue
 
-            if linea.startswith("NO_TERMINALES:"):
-                datos = linea.split(":", 1)[1].strip()
-                no_terminales = tokenizar_lista(datos)
-                en_producciones = False
-                continue
+        if linea.startswith("NO_TERMINALES:"):
+            usa_secciones = True
+            datos = linea.split(":", 1)[1].strip()
+            no_terminales = tokenizar_lista(datos)
+            en_producciones = False
+            continue
 
-            if linea.startswith("INICIAL:"):
-                inicial = linea.split(":", 1)[1].strip()
-                continue
+        if linea.startswith("INICIAL:"):
+            usa_secciones = True
+            inicial = linea.split(":", 1)[1].strip()
+            en_producciones = False
+            continue
 
-            if linea.startswith("PRODUCCIONES:"):
-                en_producciones = True
-                continue
+        if linea.startswith("PRODUCCIONES:"):
+            usa_secciones = True
+            en_producciones = True
+            continue
 
-            if en_producciones:
-                lado_izq, lado_der = linea.split("->")
-                lado_izq = lado_izq.strip()
-                alternativas = lado_der.split("|")
-                for alt in alternativas:
-                    simbolos_der = alt.strip().split()
-                    if simbolos_der == [EPSILON]:
-                        simbolos_der = []
-                    producciones.append((lado_izq, simbolos_der))
+        if en_producciones or not usa_secciones:
+            producciones.extend(parsear_linea_produccion(linea, numero_linea))
+            continue
+
+        raise ValueError(f"Linea fuera de seccion en linea {numero_linea}: {linea}")
+
+    if not usa_secciones:
+        no_terminales = inferir_no_terminales(producciones)
+        inicial, producciones = quitar_produccion_aumentada_si_existe(producciones, no_terminales)
+        terminales = inferir_terminales(producciones, no_terminales)
+    elif not no_terminales:
+        no_terminales = inferir_no_terminales(producciones)
+
+    if not usa_secciones and not inicial and producciones:
+        inicial = producciones[0][0]
+
+    if usa_secciones and not terminales:
+        terminales = inferir_terminales(producciones, no_terminales)
+
+    if not no_terminales:
+        raise ValueError("La gramatica debe tener al menos un no terminal")
+    if not inicial:
+        raise ValueError("La gramatica debe declarar INICIAL o tener una produccion inicial")
+    if inicial not in no_terminales:
+        raise ValueError("El simbolo INICIAL debe estar en NO_TERMINALES")
+    if not producciones:
+        raise ValueError("La gramatica debe tener al menos una produccion")
+
+    simbolos_validos = set(terminales) | set(no_terminales)
+    for lado_izq, lado_der in producciones:
+        if lado_izq not in no_terminales:
+            raise ValueError(f"El lado izquierdo '{lado_izq}' no esta en NO_TERMINALES")
+        for simbolo in lado_der:
+            if simbolo not in simbolos_validos:
+                raise ValueError(f"El simbolo '{simbolo}' no esta declarado como terminal o no terminal")
 
     return terminales, no_terminales, inicial, producciones
+
+
+def parsear_linea_produccion(linea, numero_linea):
+
+    if "->" not in linea:
+        raise ValueError(f"Produccion invalida en linea {numero_linea}: falta '->'")
+
+    lado_izq, lado_der = linea.split("->", 1)
+    lado_izq = lado_izq.strip()
+    if not lado_izq:
+        raise ValueError(f"Produccion invalida en linea {numero_linea}: falta lado izquierdo")
+
+    producciones = []
+    alternativas = lado_der.split("|")
+    for alt in alternativas:
+        simbolos_der = alt.strip().split()
+        if simbolos_der == [EPSILON]:
+            simbolos_der = []
+        producciones.append((lado_izq, simbolos_der))
+
+    return producciones
+
+
+def inferir_no_terminales(producciones):
+
+    no_terminales = []
+    for lado_izq, _ in producciones:
+        if lado_izq not in no_terminales:
+            no_terminales.append(lado_izq)
+    return no_terminales
+
+
+def inferir_terminales(producciones, no_terminales):
+
+    terminales = []
+    no_terminales_set = set(no_terminales)
+
+    for _, lado_der in producciones:
+        for simbolo in lado_der:
+            if simbolo not in no_terminales_set and simbolo not in terminales:
+                terminales.append(simbolo)
+
+    return terminales
+
+
+def quitar_produccion_aumentada_si_existe(producciones, no_terminales):
+
+    if not producciones:
+        return None, producciones
+
+    lado_izq, lado_der = producciones[0]
+    if lado_izq.endswith("'") and len(lado_der) == 1 and lado_der[0] in no_terminales:
+        inicial = lado_der[0]
+        no_terminales.remove(lado_izq)
+        return inicial, producciones[1:]
+
+    return producciones[0][0], producciones
 
 
 def calcular_first(terminales, no_terminales, producciones):
@@ -599,6 +693,31 @@ def serializar_tabla(action, goto, terminales, no_terminales, total_estados, pro
 def construir_demo_lr1(ruta_gramatica, tokens_entrada):
 
     terminales, no_terminales, inicial, producciones = leer_gramatica(ruta_gramatica)
+    return construir_demo_lr1_desde_componentes(terminales, no_terminales, inicial, producciones, tokens_entrada)
+
+
+def construir_demo_lr1_desde_texto(texto_gramatica, tokens_entrada):
+
+    terminales, no_terminales, inicial, producciones = leer_gramatica_desde_texto(texto_gramatica)
+    return construir_demo_lr1_desde_componentes(
+        terminales,
+        no_terminales,
+        inicial,
+        producciones,
+        tokens_entrada,
+        texto_gramatica,
+    )
+
+
+def construir_demo_lr1_desde_componentes(
+    terminales,
+    no_terminales,
+    inicial,
+    producciones,
+    tokens_entrada,
+    texto_fuente_original=None,
+):
+
     first = calcular_first(terminales, no_terminales, producciones)
     follow = calcular_follow(no_terminales, producciones, inicial, first)
 
@@ -636,6 +755,10 @@ def construir_demo_lr1(ruta_gramatica, tokens_entrada):
                 formatear_produccion(lado_izq, lado_der)
                 for lado_izq, lado_der in producciones_aumentadas
             ],
+            "texto_fuente": formatear_gramatica_fuente(
+                producciones_aumentadas,
+                texto_fuente_original,
+            ),
         },
         "first": serializar_first(first_aumentado),
         "follow": serializar_follow(follow),
@@ -662,6 +785,21 @@ def construir_demo_lr1(ruta_gramatica, tokens_entrada):
         "producciones_enumeradas": enumerar_producciones(producciones_aumentadas),
         "entrada": list(tokens_entrada) + [EOF],
     }
+
+
+def formatear_gramatica_fuente(producciones_aumentadas, texto_fuente_original=None):
+
+    if texto_fuente_original and "TERMINALES:" in texto_fuente_original:
+        return texto_fuente_original.strip()
+
+    lineas = []
+    for lado_izq, lado_der in producciones_aumentadas:
+        if lado_der:
+            lineas.append(f"{lado_izq} -> {' '.join(lado_der)}")
+        else:
+            lineas.append(f"{lado_izq} -> {EPSILON}")
+
+    return "\n".join(lineas)
 
 
 def parsear_desde_gramatica(ruta_gramatica, tokens_entrada):

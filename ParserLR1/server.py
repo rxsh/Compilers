@@ -4,7 +4,7 @@ import json
 import mimetypes
 from urllib.parse import urlparse
 
-from parser import construir_demo_lr1
+from parser import construir_demo_lr1, construir_demo_lr1_desde_texto
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -49,7 +49,15 @@ class LR1RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "El campo 'tokens' debe ser una lista"}, status=400)
                 return
 
-            datos = construir_demo_lr1(str(GRAMMAR_FILE), tokens)
+            texto_gramatica = payload.get("grammar_text")
+            if texto_gramatica is not None and not isinstance(texto_gramatica, str):
+                self.send_json({"error": "El campo 'grammar_text' debe ser texto"}, status=400)
+                return
+
+            if texto_gramatica:
+                datos = construir_demo_lr1_desde_texto(texto_gramatica, tokens)
+            else:
+                datos = construir_demo_lr1(str(GRAMMAR_FILE), tokens)
             self.send_json(datos)
         except json.JSONDecodeError:
             self.send_json({"error": "JSON invalido"}, status=400)

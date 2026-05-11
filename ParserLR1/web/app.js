@@ -1,5 +1,8 @@
 const grammarTextView = document.getElementById("grammarTextView");
 const grammarInitial = document.getElementById("grammarInitial");
+const applyGrammarBtn = document.getElementById("applyGrammarBtn");
+const productionNumbers = document.getElementById("productionNumbers");
+const productionTextView = document.getElementById("productionTextView");
 const tokenInput = document.getElementById("tokenInput");
 const loadedInput = document.getElementById("loadedInput");
 const parseBtn = document.getElementById("parseBtn");
@@ -8,6 +11,14 @@ const maxStepsInput = document.getElementById("maxStepsInput");
 let currentData = null;
 
 parseBtn.addEventListener("click", async () => {
+  runParse();
+});
+
+applyGrammarBtn.addEventListener("click", async () => {
+  runParse();
+});
+
+async function runParse() {
   if (!currentData) {
     return;
   }
@@ -21,6 +32,7 @@ parseBtn.addEventListener("click", async () => {
       },
       body: JSON.stringify({
         tokens,
+        grammar_text: grammarTextView.value,
         max_steps: Number(maxStepsInput.value) || 100,
       }),
     });
@@ -34,12 +46,12 @@ parseBtn.addEventListener("click", async () => {
   } catch (error) {
     alert(error.message);
   }
-});
+}
 
 function renderData(data) {
   currentData = structuredClone(data);
   renderGrammar(currentData.gramatica);
-  renderFirstTable(currentData.first || {});
+  renderFirstTable(currentData.first || {}, currentData.gramatica || {});
   renderClosureTable(currentData.estados || [], currentData.transiciones || []);
   renderLRTable(currentData.tabla || []);
   renderTrace(currentData.parseo || {});
@@ -52,11 +64,14 @@ function renderData(data) {
 function renderGrammar(grammar) {
   grammarInitial.textContent = grammar.inicial_aumentado || grammar.inicial || "";
 
-  const lines = grammar.producciones_aumentadas.map((prod, index) => `(${index}) ${prod}`);
-  grammarTextView.value = lines.join("\n");
+  grammarTextView.value = grammar.texto_fuente || "";
+
+  const productions = grammar.producciones_aumentadas || [];
+  productionNumbers.innerHTML = productions.map((_, index) => `<div>(${index})</div>`).join("");
+  productionTextView.value = productions.join("\n");
 }
 
-function renderFirstTable(first) {
+function renderFirstTable(first, grammar) {
   const table = document.getElementById("firstTable");
   table.innerHTML = `
     <thead>
@@ -68,8 +83,9 @@ function renderFirstTable(first) {
   `;
 
   const tbody = document.createElement("tbody");
+  const hiddenSymbols = new Set([...(grammar.terminales || []), "$", "ε"]);
   Object.entries(first).forEach(([key, values]) => {
-    if (["x", "y", "id", "+", "*", "(", ")", "$", "ε"].includes(key)) {
+    if (hiddenSymbols.has(key)) {
       return;
     }
 

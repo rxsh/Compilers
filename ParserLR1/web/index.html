@@ -25,7 +25,13 @@
           <div><strong>Inicial visible:</strong> <span id="grammarInitial"></span></div>
         </div>
         <div class="editor-wrap">
-          <textarea id="grammarTextView" spellcheck="false" readonly></textarea>
+          <label class="editor-label" for="grammarTextView">Gramática editable</label>
+          <textarea id="grammarTextView" spellcheck="false"></textarea>
+          <button id="applyGrammarBtn" type="button">Actualizar gramática</button>
+        </div>
+        <div class="numbered-productions">
+          <div class="number-gutter" id="productionNumbers"></div>
+          <textarea id="productionTextView" spellcheck="false" readonly></textarea>
         </div>
       </aside>
 
