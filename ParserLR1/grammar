@@ -1,0 +1,3 @@
+Me han pedido hacer una gramatica para mi parser el cual permiet componer funciones en si puede ser como un minilatex
+ejemplos que pone la profesora date(5,x,26), body(Hola + *Mundo* + big(Ejemplo). La idea es que se pueda componer funciones, necesitamos tambien asignacion por lo que hay variables
+La idea es crear nuestra propia gramatica tenia pensado hacer como un markdown tampoco piden tantas funcionalidades empecemos primero con dise;ar una gramatica.

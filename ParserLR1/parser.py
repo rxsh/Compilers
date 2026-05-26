@@ -1,6 +1,5 @@
-from dataclasses import dataclass
 import json
-
+from dataclasses import dataclass
 
 EPSILON = "\u03b5"
 EOF = "$"
@@ -73,7 +72,9 @@ def leer_gramatica_desde_texto(texto):
 
     if not usa_secciones:
         no_terminales = inferir_no_terminales(producciones)
-        inicial, producciones = quitar_produccion_aumentada_si_existe(producciones, no_terminales)
+        inicial, producciones = quitar_produccion_aumentada_si_existe(
+            producciones, no_terminales
+        )
         terminales = inferir_terminales(producciones, no_terminales)
     elif not no_terminales:
         no_terminales = inferir_no_terminales(producciones)
@@ -87,7 +88,9 @@ def leer_gramatica_desde_texto(texto):
     if not no_terminales:
         raise ValueError("La gramatica debe tener al menos un no terminal")
     if not inicial:
-        raise ValueError("La gramatica debe declarar INICIAL o tener una produccion inicial")
+        raise ValueError(
+            "La gramatica debe declarar INICIAL o tener una produccion inicial"
+        )
     if inicial not in no_terminales:
         raise ValueError("El simbolo INICIAL debe estar en NO_TERMINALES")
     if not producciones:
@@ -99,7 +102,9 @@ def leer_gramatica_desde_texto(texto):
             raise ValueError(f"El lado izquierdo '{lado_izq}' no esta en NO_TERMINALES")
         for simbolo in lado_der:
             if simbolo not in simbolos_validos:
-                raise ValueError(f"El simbolo '{simbolo}' no esta declarado como terminal o no terminal")
+                raise ValueError(
+                    f"El simbolo '{simbolo}' no esta declarado como terminal o no terminal"
+                )
 
     return terminales, no_terminales, inicial, producciones
 
@@ -112,7 +117,9 @@ def parsear_linea_produccion(linea, numero_linea):
     lado_izq, lado_der = linea.split("->", 1)
     lado_izq = lado_izq.strip()
     if not lado_izq:
-        raise ValueError(f"Produccion invalida en linea {numero_linea}: falta lado izquierdo")
+        raise ValueError(
+            f"Produccion invalida en linea {numero_linea}: falta lado izquierdo"
+        )
 
     producciones = []
     alternativas = lado_der.split("|")
@@ -364,7 +371,7 @@ def closure(items, producciones_por_nt, no_terminales, first):
             if simbolo not in no_terminales:
                 continue
 
-            beta = list(item.lado_der[item.punto + 1:])
+            beta = list(item.lado_der[item.punto + 1 :])
             beta.append(item.anticipacion)
             primeros = calcular_first_cadena(beta, first) - {EPSILON}
 
@@ -431,23 +438,25 @@ def enumerar_producciones(producciones):
     enumeradas = []
 
     for indice, (lado_izq, lado_der) in enumerate(producciones):
-        enumeradas.append({
-            "indice": indice,
-            "lado_izq": lado_izq,
-            "lado_der": list(lado_der),
-        })
+        enumeradas.append(
+            {
+                "indice": indice,
+                "lado_izq": lado_izq,
+                "lado_der": list(lado_der),
+            }
+        )
 
     return enumeradas
 
 
-def construir_tabla_lr1(estados, transiciones, terminales, no_terminales, producciones, inicial_aumentado):
+def construir_tabla_lr1(
+    estados, transiciones, terminales, no_terminales, producciones, inicial_aumentado
+):
 
     action = {}
     goto = {}
     conflictos = []
-    # Mapa de apoyo:
     # (lado_izq, lado_der) -> numero de produccion
-    # Esto nos deja saber rapidamente que reduccion registrar en ACTION.
     mapa_producciones = {
         (lado_izq, tuple(lado_der)): indice
         for indice, (lado_izq, lado_der) in enumerate(producciones)
@@ -461,37 +470,29 @@ def construir_tabla_lr1(estados, transiciones, terminales, no_terminales, produc
             conflictos.append((clave, action[clave], valor))
         action[clave] = valor
 
-    # Paso 1:
-    # Las transiciones del automata llenan:
-    # - ACTION con "shift" si la transicion es con un terminal
-    # - GOTO si la transicion es con un no terminal
+    # 1:
     for (estado, simbolo), destino in transiciones.items():
         if simbolo in terminales:
             registrar_accion(estado, simbolo, ("shift", destino))
         elif simbolo in no_terminales:
             goto[(estado, simbolo)] = destino
 
-    # Paso 2:
-    # Todo item con el punto al final produce una accion.
-    # Puede ser:
-    # - accept, si es el item inicial aumentado con lookahead $
-    # - reduce, usando el lookahead exacto del item LR(1)
+    # 2:
     for indice_estado, estado in enumerate(estados):
         for item in estado:
             if not item.completado():
                 continue
 
-            # Caso de aceptacion:
             # inicial_aumentado -> inicial ., $
             if item.lado_izq == inicial_aumentado and item.anticipacion == EOF:
                 registrar_accion(indice_estado, EOF, ("accept",))
                 continue
 
-            # Caso de reduccion:
-            # A -> alpha ., a
             # entonces ACTION[estado, a] = reduce A -> alpha
             numero_produccion = mapa_producciones[(item.lado_izq, item.lado_der)]
-            registrar_accion(indice_estado, item.anticipacion, ("reduce", numero_produccion))
+            registrar_accion(
+                indice_estado, item.anticipacion, ("reduce", numero_produccion)
+            )
 
     return action, goto, conflictos
 
@@ -510,12 +511,14 @@ def parsear_lr1(action, goto, producciones, tokens):
         token_actual = entrada[indice_entrada]
         accion = action.get((estado, token_actual))
 
-        historial.append({
-            "pila_estados": list(pila_estados),
-            "pila_simbolos": list(pila_simbolos),
-            "entrada": entrada[indice_entrada:],
-            "accion": formatear_accion_corta(accion),
-        })
+        historial.append(
+            {
+                "pila_estados": list(pila_estados),
+                "pila_simbolos": list(pila_simbolos),
+                "entrada": entrada[indice_entrada:],
+                "accion": formatear_accion_corta(accion),
+            }
+        )
 
         if accion is None:
             return {
@@ -630,22 +633,34 @@ def serializar_estados(estados, simbolo_inicial_aumentado=None):
 
         def clave_orden_item(par):
             lhs, rhs, punto = par[0]
-            prioridad_inicial = 0 if simbolo_inicial_aumentado is not None and lhs == simbolo_inicial_aumentado else 1
+            prioridad_inicial = (
+                0
+                if simbolo_inicial_aumentado is not None
+                and lhs == simbolo_inicial_aumentado
+                else 1
+            )
             return (prioridad_inicial, lhs, rhs, punto)
 
         items_agrupados = []
         for _, info in sorted(agrupados.items(), key=clave_orden_item):
             lookaheads = sorted(info["lookaheads"])
-            items_agrupados.append({
-                "texto": f"{info['texto_base']}, {formatear_lookaheads(lookaheads)}",
-                "punto": info["punto"],
-            })
+            items_agrupados.append(
+                {
+                    "texto": f"{info['texto_base']}, {formatear_lookaheads(lookaheads)}",
+                    "punto": info["punto"],
+                }
+            )
 
-        resultado.append({
-            "indice": indice,
-            "items": [item["texto"] for item in items_agrupados],
-            "kernel": [item["texto"] for item in items_agrupados if item["punto"] > 0] or ["-"],
-        })
+        resultado.append(
+            {
+                "indice": indice,
+                "items": [item["texto"] for item in items_agrupados],
+                "kernel": [
+                    item["texto"] for item in items_agrupados if item["punto"] > 0
+                ]
+                or ["-"],
+            }
+        )
 
     return resultado
 
@@ -654,16 +669,20 @@ def serializar_transiciones(transiciones):
 
     resultado = []
     for (estado, simbolo), destino in sorted(transiciones.items()):
-        resultado.append({
-            "desde": estado,
-            "simbolo": simbolo,
-            "hacia": destino,
-        })
+        resultado.append(
+            {
+                "desde": estado,
+                "simbolo": simbolo,
+                "hacia": destino,
+            }
+        )
 
     return resultado
 
 
-def serializar_tabla(action, goto, terminales, no_terminales, total_estados, producciones):
+def serializar_tabla(
+    action, goto, terminales, no_terminales, total_estados, producciones
+):
 
     filas = []
 
@@ -681,11 +700,13 @@ def serializar_tabla(action, goto, terminales, no_terminales, total_estados, pro
             if destino is not None:
                 fila_goto[no_terminal] = destino
 
-        filas.append({
-            "estado": estado,
-            "action": fila_action,
-            "goto": fila_goto,
-        })
+        filas.append(
+            {
+                "estado": estado,
+                "action": fila_action,
+                "goto": fila_goto,
+            }
+        )
 
     return filas
 
@@ -693,12 +714,16 @@ def serializar_tabla(action, goto, terminales, no_terminales, total_estados, pro
 def construir_demo_lr1(ruta_gramatica, tokens_entrada):
 
     terminales, no_terminales, inicial, producciones = leer_gramatica(ruta_gramatica)
-    return construir_demo_lr1_desde_componentes(terminales, no_terminales, inicial, producciones, tokens_entrada)
+    return construir_demo_lr1_desde_componentes(
+        terminales, no_terminales, inicial, producciones, tokens_entrada
+    )
 
 
 def construir_demo_lr1_desde_texto(texto_gramatica, tokens_entrada):
 
-    terminales, no_terminales, inicial, producciones = leer_gramatica_desde_texto(texto_gramatica)
+    terminales, no_terminales, inicial, producciones = leer_gramatica_desde_texto(
+        texto_gramatica
+    )
     return construir_demo_lr1_desde_componentes(
         terminales,
         no_terminales,
@@ -721,10 +746,12 @@ def construir_demo_lr1_desde_componentes(
     first = calcular_first(terminales, no_terminales, producciones)
     follow = calcular_follow(no_terminales, producciones, inicial, first)
 
-    inicial_aumentado, no_terminales_aumentados, producciones_aumentadas = aumentar_gramatica(
-        inicial, no_terminales, producciones
+    inicial_aumentado, no_terminales_aumentados, producciones_aumentadas = (
+        aumentar_gramatica(inicial, no_terminales, producciones)
     )
-    first_aumentado = calcular_first(terminales, no_terminales_aumentados, producciones_aumentadas)
+    first_aumentado = calcular_first(
+        terminales, no_terminales_aumentados, producciones_aumentadas
+    )
     estados, transiciones = coleccion_canonica_lr1(
         terminales,
         no_terminales_aumentados,
@@ -748,7 +775,8 @@ def construir_demo_lr1_desde_componentes(
             "no_terminales": no_terminales,
             "inicial": inicial,
             "producciones": [
-                formatear_produccion(lado_izq, lado_der) for lado_izq, lado_der in producciones
+                formatear_produccion(lado_izq, lado_der)
+                for lado_izq, lado_der in producciones
             ],
             "inicial_aumentado": inicial_aumentado,
             "producciones_aumentadas": [
@@ -838,7 +866,6 @@ def imprimir_resumen_demo(datos):
 
 
 if __name__ == "__main__":
-
     demo = construir_demo_lr1("gramatica.txt", ["x", "x", "y", "y"])
     imprimir_resumen_demo(demo)
     print("\nJSON:")

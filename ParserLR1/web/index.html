@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Visualizador LR(1)</title>
+  <title>LR(1)</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">LR(1)</p>
         <h1>LR(1) grammar</h1>
       </div>
     </header>
@@ -25,7 +24,6 @@
           <div><strong>Inicial visible:</strong> <span id="grammarInitial"></span></div>
         </div>
         <div class="editor-wrap">
-          <label class="editor-label" for="grammarTextView">Gramática editable</label>
           <textarea id="grammarTextView" spellcheck="false"></textarea>
           <button id="applyGrammarBtn" type="button">Actualizar gramática</button>
         </div>
