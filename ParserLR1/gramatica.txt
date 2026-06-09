@@ -1,13 +1,21 @@
 # Terminales
-TERMINALES: x y
+TERMINALES: ID STRING NUMBER = + ; ( ) bold italic color upper lower
 
 # No terminales
-NO_TERMINALES: L L P
+NO_TERMINALES: Program StmtList Stmt Expr ExprTail Term Factor FuncCall FunctionName Literal
 
 # Simbolo inicial
-INICIAL: L
+INICIAL: Program
 
 # Producciones
 PRODUCCIONES:
-L -> L P | P
-P -> x P y | x y
+Program -> StmtList
+StmtList -> Stmt ; StmtList | Stmt
+Stmt -> ID = Expr | Expr
+Expr -> Term ExprTail
+ExprTail -> + Term ExprTail | ε
+Term -> Factor
+Factor -> FuncCall | Literal | ID | ( Expr )
+FuncCall -> FunctionName ( Expr )
+FunctionName -> bold | italic | color | upper | lower
+Literal -> STRING | NUMBER

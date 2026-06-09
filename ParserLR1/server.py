@@ -4,7 +4,12 @@ import json
 import mimetypes
 from urllib.parse import urlparse
 
-from parser import construir_demo_lr1, construir_demo_lr1_desde_texto
+from parser import (
+    construir_demo_lr1,
+    construir_demo_lr1_desde_fuente,
+    construir_demo_lr1_desde_texto,
+    construir_demo_lr1_desde_texto_y_fuente,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -34,7 +39,10 @@ class LR1RequestHandler(BaseHTTPRequestHandler):
 
     def handle_demo(self):
         try:
-            datos = construir_demo_lr1(str(GRAMMAR_FILE), ["x", "x", "y", "y"])
+            datos = construir_demo_lr1_desde_fuente(
+                str(GRAMMAR_FILE),
+                'resultado = color("Rojo") + upper(nombre)',
+            )
             self.send_json(datos)
         except Exception as exc:
             self.send_json({"error": str(exc)}, status=500)
@@ -49,12 +57,21 @@ class LR1RequestHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "El campo 'tokens' debe ser una lista"}, status=400)
                 return
 
+            texto_fuente = payload.get("source_text")
+            if texto_fuente is not None and not isinstance(texto_fuente, str):
+                self.send_json({"error": "El campo 'source_text' debe ser texto"}, status=400)
+                return
+
             texto_gramatica = payload.get("grammar_text")
             if texto_gramatica is not None and not isinstance(texto_gramatica, str):
                 self.send_json({"error": "El campo 'grammar_text' debe ser texto"}, status=400)
                 return
 
-            if texto_gramatica:
+            if texto_fuente and texto_gramatica:
+                datos = construir_demo_lr1_desde_texto_y_fuente(texto_gramatica, texto_fuente)
+            elif texto_fuente:
+                datos = construir_demo_lr1_desde_fuente(str(GRAMMAR_FILE), texto_fuente)
+            elif texto_gramatica:
                 datos = construir_demo_lr1_desde_texto(texto_gramatica, tokens)
             else:
                 datos = construir_demo_lr1(str(GRAMMAR_FILE), tokens)

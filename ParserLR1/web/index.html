@@ -76,9 +76,9 @@
         </div>
 
         <div class="parser-controls">
-          <div class="field">
-            <label for="tokenInput">Input (tokens)</label>
-            <input id="tokenInput" type="text" placeholder="id + id * id">
+          <div class="field source-field">
+            <label for="sourceInput">Source input</label>
+            <textarea id="sourceInput" spellcheck="false" placeholder='resultado = color("Rojo") + upper(nombre)'></textarea>
           </div>
           <div class="field small">
             <label for="maxStepsInput">Maximum number of steps</label>
@@ -93,25 +93,47 @@
         <div class="parser-status-row">
           <div id="parseStatus" class="status-chip"></div>
           <div class="input-preview">
-            <strong>Entrada cargada:</strong>
+            <strong>Tokens al parser:</strong>
             <span id="loadedInput"></span>
           </div>
         </div>
 
         <div class="parser-results">
           <div class="trace-box">
-            <h3>Trace</h3>
+            <h3>Scanner</h3>
+            <div id="scannerErrors" class="alert hidden"></div>
+            <div class="table-wrap">
+              <table id="scannerTable"></table>
+            </div>
+            <div class="debug-box">
+              <h4>Debug SCAN</h4>
+              <pre id="scannerDebug"></pre>
+            </div>
+          </div>
+
+          <div class="trace-box">
+            <h3>Parser Trace</h3>
             <div class="table-wrap">
               <table id="traceTable"></table>
             </div>
           </div>
 
-          <div class="tree-box">
-            <h3>Tree</h3>
-            <div id="treeRoot" class="tree-root"></div>
-          </div>
+          <!-- tree-box removed; the tree is rendered in the bottom full-width panel -->
         </div>
       </section>
+    </section>
+    <!-- Tree panel moved to the bottom for better visibility -->
+    <section class="panel tree-bottom-panel">
+      <div class="panel-title-row">
+        <h2>Tree</h2>
+        <div class="tree-controls">
+          <button id="treeLeftBtn" type="button" class="tree-btn">&lt;</button>
+          <button id="treeRightBtn" type="button" class="tree-btn">&gt;</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div id="treeRoot" class="tree-root" tabindex="0" title="Usa arrastre, rueda o flechas izquierda/derecha"></div>
+      </div>
     </section>
   </div>
 

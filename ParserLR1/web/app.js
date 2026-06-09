@@ -3,12 +3,18 @@ const grammarInitial = document.getElementById("grammarInitial");
 const applyGrammarBtn = document.getElementById("applyGrammarBtn");
 const productionNumbers = document.getElementById("productionNumbers");
 const productionTextView = document.getElementById("productionTextView");
-const tokenInput = document.getElementById("tokenInput");
+const sourceInput = document.getElementById("sourceInput");
 const loadedInput = document.getElementById("loadedInput");
 const parseBtn = document.getElementById("parseBtn");
 const maxStepsInput = document.getElementById("maxStepsInput");
+const treeRoot = document.getElementById("treeRoot");
+const treeLeftBtn = document.getElementById("treeLeftBtn");
+const treeRightBtn = document.getElementById("treeRightBtn");
 
 let currentData = null;
+let isDraggingTree = false;
+let dragStartX = 0;
+let dragScrollLeft = 0;
 
 parseBtn.addEventListener("click", async () => {
   runParse();
@@ -18,20 +24,74 @@ applyGrammarBtn.addEventListener("click", async () => {
   runParse();
 });
 
+treeLeftBtn.addEventListener("click", () => {
+  treeRoot.scrollBy({ left: -220, behavior: "smooth" });
+});
+
+treeRightBtn.addEventListener("click", () => {
+  treeRoot.scrollBy({ left: 220, behavior: "smooth" });
+});
+
+treeRoot.addEventListener("mousedown", (event) => {
+  isDraggingTree = true;
+  treeRoot.classList.add("dragging");
+  dragStartX = event.pageX - treeRoot.offsetLeft;
+  dragScrollLeft = treeRoot.scrollLeft;
+});
+
+window.addEventListener("mouseup", () => {
+  isDraggingTree = false;
+  treeRoot.classList.remove("dragging");
+});
+
+treeRoot.addEventListener("mouseleave", () => {
+  isDraggingTree = false;
+  treeRoot.classList.remove("dragging");
+});
+
+treeRoot.addEventListener("mousemove", (event) => {
+  if (!isDraggingTree) {
+    return;
+  }
+  event.preventDefault();
+  const x = event.pageX - treeRoot.offsetLeft;
+  const walk = (x - dragStartX) * 1.3;
+  treeRoot.scrollLeft = dragScrollLeft - walk;
+});
+
+treeRoot.addEventListener("wheel", (event) => {
+  if (event.deltaY === 0 && event.deltaX === 0) {
+    return;
+  }
+  event.preventDefault();
+  const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+  treeRoot.scrollLeft += delta;
+}, { passive: false });
+
+treeRoot.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    treeRoot.scrollBy({ left: -160, behavior: "smooth" });
+  }
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    treeRoot.scrollBy({ left: 160, behavior: "smooth" });
+  }
+});
+
 async function runParse() {
   if (!currentData) {
     return;
   }
 
   try {
-    const tokens = tokenInput.value.trim() ? tokenInput.value.trim().split(/\s+/) : [];
     const response = await fetch("/api/parse", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        tokens,
+        source_text: sourceInput.value,
         grammar_text: grammarTextView.value,
         max_steps: Number(maxStepsInput.value) || 100,
       }),
@@ -54,16 +114,16 @@ function renderData(data) {
   renderFirstTable(currentData.first || {}, currentData.gramatica || {});
   renderClosureTable(currentData.estados || [], currentData.transiciones || []);
   renderLRTable(currentData.tabla || []);
+  renderScanner(currentData.scanner || {});
   renderTrace(currentData.parseo || {});
   renderTree(currentData.parseo ? currentData.parseo.arbol : null);
-  tokenInput.value = (currentData.entrada || []).filter((x) => x !== "$").join(" ");
-  loadedInput.textContent = (currentData.entrada || []).join(" ");
+  sourceInput.value = currentData.scanner?.fuente || "";
+  loadedInput.textContent = (currentData.entrada_lexica || []).join(" ");
   renderConflicts(currentData.conflictos || []);
 }
 
 function renderGrammar(grammar) {
   grammarInitial.textContent = grammar.inicial_aumentado || grammar.inicial || "";
-
   grammarTextView.value = grammar.texto_fuente || "";
 
   const productions = grammar.producciones_aumentadas || [];
@@ -143,7 +203,7 @@ function renderClosureTable(states, transitions) {
 
 function renderLRTable(rows) {
   const table = document.getElementById("lrTable");
-  if (!table) return; // LR table removed from UI for presentation
+  if (!table) return;
   table.innerHTML = "";
 
   if (!rows.length) {
@@ -192,6 +252,64 @@ function renderLRTable(rows) {
   table.appendChild(tbody);
 }
 
+function renderScanner(scanner) {
+  const table = document.getElementById("scannerTable");
+  const errorBox = document.getElementById("scannerErrors");
+  const debugBox = document.getElementById("scannerDebug");
+  table.innerHTML = "";
+
+  if (!scanner || !scanner.tokens) {
+    errorBox.classList.add("hidden");
+    debugBox.textContent = "";
+    return;
+  }
+
+  const errors = scanner.errores || [];
+  if (errors.length) {
+    errorBox.classList.remove("hidden");
+    errorBox.innerHTML = errors
+      .map((error) => `L${error.linea}:C${error.columna} - ${error.mensaje}`)
+      .join("<br>");
+  } else {
+    errorBox.classList.add("hidden");
+    errorBox.textContent = "";
+  }
+
+  const thead = document.createElement("thead");
+  thead.innerHTML = `
+    <tr>
+      <th>Type</th>
+      <th>Lexeme</th>
+      <th>Line</th>
+      <th>Column</th>
+    </tr>
+  `;
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  scanner.tokens.forEach((token) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${token.tipo}</td>
+      <td>${escapeHtml(token.lexema)}</td>
+      <td>${token.linea}</td>
+      <td>${token.columna}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  const traceLines = ["INFO SCAN - Start scanning..."];
+  (scanner.traza || []).forEach((item) => {
+    const prefix = item.evento === "error" ? "ERROR SCAN" : "DEBUG SCAN";
+    traceLines.push(
+      `${prefix} - ${item.detalle} found at (${item.linea}:${item.columna})`
+    );
+  });
+  traceLines.push(`INFO SCAN - Completed with ${errors.length} errors`);
+  debugBox.textContent = traceLines.join("\n");
+}
+
 function renderTrace(parseo) {
   const status = document.getElementById("parseStatus");
   const table = document.getElementById("traceTable");
@@ -221,7 +339,24 @@ function renderTrace(parseo) {
 
   const tbody = document.createElement("tbody");
   parseo.pasos.forEach((paso, index) => {
-    const stack = [...paso.pila_estados];
+    // Algunas entradas en 'pasos' son mensajes de info (ej. recuperación)
+    if (paso && paso.info) {
+      const lastRowBeforeInfo = tbody.lastElementChild;
+      const trInfo = document.createElement("tr");
+      trInfo.innerHTML = `
+        <td>${index + 1}</td>
+        <td colspan="3" class="alert">${escapeHtml(paso.mensaje || paso.info)}</td>
+      `;
+      tbody.appendChild(trInfo);
+
+      // Si había una fila inmediatamente anterior, márcala como parte del panic-mode
+      if (lastRowBeforeInfo && lastRowBeforeInfo.tagName === "TR") {
+        lastRowBeforeInfo.classList.add("panic-row");
+      }
+      return;
+    }
+
+    const stack = Array.isArray(paso.pila_estados) ? [...paso.pila_estados] : [];
     const symbols = paso.pila_simbolos || [];
     const intercalado = [];
 
@@ -236,8 +371,8 @@ function renderTrace(parseo) {
     tr.innerHTML = `
       <td>${index + 1}</td>
       <td>${intercalado.join(" ")}</td>
-      <td>${paso.entrada.join(" ")}</td>
-      <td class="accent-cell">${paso.accion}</td>
+      <td>${(paso.entrada || []).join(" ")}</td>
+      <td class="accent-cell">${paso.accion || ""}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -245,15 +380,23 @@ function renderTrace(parseo) {
 }
 
 function renderTree(node) {
-  const root = document.getElementById("treeRoot");
-  root.innerHTML = "";
+  treeRoot.innerHTML = "";
+  treeRoot.scrollLeft = 0;
 
   if (!node) {
-    root.textContent = "Todavía no hay árbol para mostrar.";
+    treeRoot.textContent = "Todavía no hay árbol para mostrar.";
     return;
   }
 
-  root.appendChild(buildTreeNode(node));
+  treeRoot.appendChild(buildTreeNode(node));
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function buildTreeNode(node) {

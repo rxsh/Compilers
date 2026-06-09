@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from scanner import EOF as SCANNER_EOF, escanear_fuente
 
 EPSILON = "\u03b5"
 EOF = "$"
@@ -504,6 +505,8 @@ def parsear_lr1(action, goto, producciones, tokens):
     pila_simbolos = []
     pila_nodos = []
     historial = []
+    errores = []
+    recuperado = False
     indice_entrada = 0
 
     while True:
@@ -521,11 +524,108 @@ def parsear_lr1(action, goto, producciones, tokens):
         )
 
         if accion is None:
+            # Registro del error
+            mensaje = f"No hay accion para estado {estado} con simbolo {token_actual}"
+            errores.append({
+                "tipo": "no_action",
+                "estado": estado,
+                "token": token_actual,
+                "mensaje": mensaje,
+                "indice_entrada": indice_entrada,
+            })
+
+            # Intento avanzado de recuperación:
+            # 1) buscar el índice del siguiente punto de sincronizacion (';' o EOF)
+            sync_index = None
+            for i in range(indice_entrada, len(entrada)):
+                if entrada[i] == ';' or entrada[i] == EOF:
+                    sync_index = i
+                    break
+
+            if sync_index is None:
+                # no hay punto de sincronizacion; no podemos recuperar
+                return {
+                    "aceptada": False,
+                    "error": mensaje,
+                    "pasos": historial,
+                    "arbol": None,
+                    "errores": errores,
+                    "recuperado": recuperado,
+                }
+
+            # 2) Intentar encontrar un estado en la pila que tenga una ACTION para ';'
+            found_state = False
+            target_len = len(pila_estados)
+            # simulamos pop hasta encontrar action[(estado, ';')]
+            while target_len > 0:
+                st = pila_estados[target_len - 1]
+                if action.get((st, ';')) is not None:
+                    found_state = True
+                    break
+                target_len -= 1
+
+            if found_state:
+                # Hacemos pop real hasta target_len
+                pops = len(pila_estados) - target_len
+                for _ in range(pops):
+                    if pila_simbolos:
+                        pila_simbolos.pop()
+                    if pila_nodos:
+                        pila_nodos.pop()
+                    pila_estados.pop()
+
+                # consumir tokens hasta el sincronizador (pero sin consumir el ';' aún)
+                for _ in range(indice_entrada, sync_index):
+                    indice_entrada += 1
+
+                # ahora hay una ACTION posible para ';' en estado pila_estados[-1]
+                accion_sync = action.get((pila_estados[-1], entrada[indice_entrada]))
+                if accion_sync is None:
+                    # fallback: si por alguna razon no hay accion, hacer el comportamiento antiguo
+                    indice_entrada = sync_index + (1 if entrada[sync_index] == ';' else 0)
+                    recuperado = True
+                    pila_estados = [0]
+                    pila_simbolos = []
+                    pila_nodos = []
+                    historial.append({
+                        "info": "recuperacion",
+                        "mensaje": f"Se consumo entrada hasta ';' y se reinicio el parser. Error: {mensaje}",
+                    })
+                    continue
+
+                # registrar que recuperamos desde el error
+                recuperado = True
+                historial.append({
+                    "info": "recuperacion",
+                    "mensaje": f"Se hizo pop hasta estado con accion para ';' y se avanzo al sincronizador. Error: {mensaje}",
+                })
+
+                # no consumimos el ';' aquí explícitamente; dejaremos que el bucle procese la accion_sync
+                continue
+
+            # Si no encontramos un estado con ACTION para ';', fallback al comportamiento anterior:
+            while indice_entrada < len(entrada) and entrada[indice_entrada] not in [';', EOF]:
+                indice_entrada += 1
+
+            if indice_entrada < len(entrada) and entrada[indice_entrada] == ';':
+                indice_entrada += 1
+                recuperado = True
+                pila_estados = [0]
+                pila_simbolos = []
+                pila_nodos = []
+                historial.append({
+                    "info": "recuperacion",
+                    "mensaje": f"Se consumo entrada hasta ';' y se reinicio el parser. Error: {mensaje}",
+                })
+                continue
+
             return {
                 "aceptada": False,
-                "error": f"No hay accion para estado {estado} con simbolo {token_actual}",
+                "error": mensaje,
                 "pasos": historial,
                 "arbol": None,
+                "errores": errores,
+                "recuperado": recuperado,
             }
 
         if accion[0] == "shift":
@@ -719,6 +819,14 @@ def construir_demo_lr1(ruta_gramatica, tokens_entrada):
     )
 
 
+def construir_demo_lr1_desde_fuente(ruta_gramatica, texto_fuente):
+
+    terminales, no_terminales, inicial, producciones = leer_gramatica(ruta_gramatica)
+    return construir_demo_lr1_desde_componentes_con_scanner(
+        terminales, no_terminales, inicial, producciones, texto_fuente
+    )
+
+
 def construir_demo_lr1_desde_texto(texto_gramatica, tokens_entrada):
 
     terminales, no_terminales, inicial, producciones = leer_gramatica_desde_texto(
@@ -730,6 +838,21 @@ def construir_demo_lr1_desde_texto(texto_gramatica, tokens_entrada):
         inicial,
         producciones,
         tokens_entrada,
+        texto_gramatica,
+    )
+
+
+def construir_demo_lr1_desde_texto_y_fuente(texto_gramatica, texto_fuente):
+
+    terminales, no_terminales, inicial, producciones = leer_gramatica_desde_texto(
+        texto_gramatica
+    )
+    return construir_demo_lr1_desde_componentes_con_scanner(
+        terminales,
+        no_terminales,
+        inicial,
+        producciones,
+        texto_fuente,
         texto_gramatica,
     )
 
@@ -810,9 +933,52 @@ def construir_demo_lr1_desde_componentes(
             for clave, vieja, nueva in conflictos
         ],
         "parseo": parseo,
+        "scanner": {
+            "fuente": "",
+            "tokens": [],
+            "errores": [],
+            "traza": [],
+        },
         "producciones_enumeradas": enumerar_producciones(producciones_aumentadas),
         "entrada": list(tokens_entrada) + [EOF],
+        "entrada_lexica": list(tokens_entrada),
     }
+
+
+def construir_demo_lr1_desde_componentes_con_scanner(
+    terminales,
+    no_terminales,
+    inicial,
+    producciones,
+    texto_fuente,
+    texto_fuente_original=None,
+):
+
+    resultado_scanner = escanear_fuente(texto_fuente)
+    tokens_scanner = resultado_scanner["tokens"]
+    tokens_parser = [
+        token["tipo"]
+        for token in tokens_scanner
+        if token["tipo"] != SCANNER_EOF
+    ]
+
+    datos = construir_demo_lr1_desde_componentes(
+        terminales,
+        no_terminales,
+        inicial,
+        producciones,
+        tokens_parser,
+        texto_fuente_original,
+    )
+
+    datos["scanner"] = {
+        "fuente": texto_fuente,
+        "tokens": tokens_scanner,
+        "errores": resultado_scanner["errores"],
+        "traza": resultado_scanner["traza"],
+    }
+    datos["entrada_lexica"] = tokens_parser
+    return datos
 
 
 def formatear_gramatica_fuente(producciones_aumentadas, texto_fuente_original=None):
@@ -866,7 +1032,10 @@ def imprimir_resumen_demo(datos):
 
 
 if __name__ == "__main__":
-    demo = construir_demo_lr1("gramatica.txt", ["x", "x", "y", "y"])
+    demo = construir_demo_lr1_desde_fuente(
+        "gramatica.txt",
+        'resultado = color("Rojo") + upper(nombre)',
+    )
     imprimir_resumen_demo(demo)
     print("\nJSON:")
     print(json.dumps(demo, ensure_ascii=False, indent=2))
