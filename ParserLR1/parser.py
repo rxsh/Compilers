@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import dataclass
 from scanner import EOF as SCANNER_EOF, escanear_fuente
 
@@ -357,6 +358,347 @@ class NodoParseo:
         }
 
 
+def escape_html(texto):
+
+    return (
+        str(texto)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def crear_valor(texto="", html=None, tipo="value", extra=None):
+
+    valor = {
+        "tipo": tipo,
+        "texto": str(texto),
+        "html": html if html is not None else escape_html(texto),
+    }
+    if extra:
+        valor.update(extra)
+    return valor
+
+
+def crear_token_semantico(token):
+
+    if isinstance(token, dict):
+        return {
+            "tipo": token.get("tipo", ""),
+            "lexema": token.get("lexema", token.get("tipo", "")),
+            "linea": token.get("linea"),
+            "columna": token.get("columna"),
+        }
+
+    return {
+        "tipo": str(token),
+        "lexema": str(token),
+        "linea": None,
+        "columna": None,
+    }
+
+
+def desescapar_literal_string(lexema):
+
+    if len(lexema) >= 2 and lexema[0] == '"' and lexema[-1] == '"':
+        contenido = lexema[1:-1]
+    else:
+        contenido = lexema
+
+    escapes = {
+        "n": "\n",
+        "t": "\t",
+        "r": "\r",
+        '"': '"',
+        "\\": "\\",
+    }
+
+    resultado = []
+    i = 0
+    while i < len(contenido):
+        ch = contenido[i]
+        if ch == "\\" and i + 1 < len(contenido):
+            siguiente = contenido[i + 1]
+            resultado.append(escapes.get(siguiente, siguiente))
+            i += 2
+            continue
+        resultado.append(ch)
+        i += 1
+
+    return "".join(resultado)
+
+
+def sanitizar_color_css(texto):
+
+    texto = str(texto).strip()
+    mapa_colores = {
+        "rojo": "red",
+        "verde": "green",
+        "azul": "blue",
+        "amarillo": "gold",
+        "negro": "black",
+        "blanco": "white",
+        "gris": "gray",
+        "gris oscuro": "dimgray",
+        "gris claro": "lightgray",
+        "morado": "purple",
+        "violeta": "violet",
+        "naranja": "orange",
+        "rosado": "hotpink",
+        "cafe": "saddlebrown",
+        "marron": "brown",
+        "celeste": "skyblue",
+        "turquesa": "turquoise",
+    }
+    clave = texto.lower()
+    if clave in mapa_colores:
+        return mapa_colores[clave]
+    if re.fullmatch(r"[a-zA-Z0-9#(),.%\s-]{1,40}", texto):
+        return texto
+    return "inherit"
+
+
+def aplicar_funcion_documento(nombre, argumento):
+
+    texto = argumento.get("texto", "")
+    html = argumento.get("html", escape_html(texto))
+
+    if nombre == "bold":
+        return crear_valor(texto, f"<strong>{html}</strong>")
+    if nombre == "italic":
+        return crear_valor(texto, f"<em>{html}</em>")
+    if nombre == "upper":
+        return crear_valor(texto.upper(), f"<span class='fn-upper'>{escape_html(texto.upper())}</span>")
+    if nombre == "lower":
+        return crear_valor(texto.lower(), f"<span class='fn-lower'>{escape_html(texto.lower())}</span>")
+    return crear_valor(texto, html)
+
+
+def aplicar_color_documento(color_valor, contenido_valor):
+
+    color_css = sanitizar_color_css(color_valor.get("texto", ""))
+    texto = contenido_valor.get("texto", "")
+    html = contenido_valor.get("html", escape_html(texto))
+    return crear_valor(texto, f"<span style='color: {color_css}'>{html}</span>")
+
+
+def crear_contexto_traduccion():
+
+    return {
+        "variables": {},
+        "advertencias": [],
+    }
+
+
+def clonar_valor_semantico(valor):
+
+    if isinstance(valor, dict):
+        copia = dict(valor)
+        if "items" in copia and isinstance(copia["items"], list):
+            copia["items"] = list(copia["items"])
+        return copia
+    return valor
+
+
+def resolver_identificador(nombre, contexto):
+
+    if nombre in contexto["variables"]:
+        return clonar_valor_semantico(contexto["variables"][nombre])
+
+    contexto["advertencias"].append(
+        f"Identificador '{nombre}' usado sin asignacion previa."
+    )
+    return crear_valor(
+        nombre,
+        f"<span class='identifier unresolved'>{escape_html(nombre)}</span>",
+        extra={"nombre": nombre, "resuelto": False},
+    )
+
+
+def construir_documento_traducido(programa, contexto):
+
+    secciones = []
+    for sentencia in programa.get("items", []):
+        html = sentencia.get("html", "")
+        if html:
+            secciones.append(html)
+
+    if not secciones:
+        secciones.append("<p class='empty-doc'>No hay salida traducida.</p>")
+
+    cuerpo = "".join(secciones)
+    html_fragmento = (
+        "<main class='doc-shell'>"
+        "<section class='doc-output'>"
+        f"{cuerpo}"
+        "</section>"
+        "</main>"
+    )
+
+    html_completo = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documento traducido</title>
+  <style>
+    body {{
+      margin: 0;
+      padding: 32px;
+      font-family: Georgia, "Times New Roman", serif;
+      background: #ffffff;
+      color: #111111;
+    }}
+    .doc-shell {{
+      max-width: 860px;
+      margin: 0 auto;
+    }}
+    .doc-output {{
+      padding: 0;
+    }}
+    .doc-section {{
+      margin: 0 0 20px;
+      font-size: 2rem;
+      line-height: 1.2;
+      color: #111111;
+    }}
+    .doc-paragraph {{
+      margin: 0 0 18px;
+      line-height: 1.7;
+      font-size: 1.05rem;
+    }}
+    .doc-list {{
+      margin: 0 0 18px;
+      padding-left: 28px;
+      line-height: 1.7;
+      font-size: 1.05rem;
+    }}
+    .doc-list li {{
+      margin-bottom: 10px;
+    }}
+    .identifier.unresolved {{
+      color: #a63d40;
+      border-bottom: 1px dashed #a63d40;
+    }}
+    .empty-doc {{
+      margin: 0;
+      color: #52606d;
+      font-style: italic;
+    }}
+  </style>
+</head>
+<body>{html_fragmento}</body>
+</html>"""
+
+    return {
+        "html_fragmento": html_fragmento,
+        "html_documento": html_completo,
+        "variables": {
+            nombre: valor.get("texto", "")
+            for nombre, valor in contexto["variables"].items()
+        },
+        "advertencias": list(contexto["advertencias"]),
+    }
+
+
+def aplicar_accion_semantica(indice_produccion, lado_izq, lado_der, hijos, contexto):
+
+    if indice_produccion == 0:
+        return hijos[0]
+    if lado_izq == "Program":
+        return {"tipo": "program", "items": hijos[0].get("items", [])}
+    if lado_izq == "StmtList" and lado_der == ["Stmt", ";", "StmtList"]:
+        return {"tipo": "stmtlist", "items": [hijos[0]] + hijos[2].get("items", [])}
+    if lado_izq == "StmtList" and lado_der == ["Stmt"]:
+        return {"tipo": "stmtlist", "items": [hijos[0]]}
+    if lado_izq == "Stmt" and lado_der == ["ID", "=", "Expr"]:
+        nombre = hijos[0].get("lexema", hijos[0].get("texto", "ID"))
+        valor = clonar_valor_semantico(hijos[2])
+        contexto["variables"][nombre] = valor
+        return {
+            "tipo": "stmt",
+            "html": "",
+            "texto": valor.get("texto", ""),
+            "nombre": nombre,
+            "valor": valor,
+        }
+    if lado_izq == "Stmt" and lado_der == ["DocStmt"]:
+        return hijos[0]
+    if lado_izq == "DocStmt" and lado_der == ["section", "(", "Expr", ")"]:
+        valor = hijos[2]
+        return {
+            "tipo": "stmt",
+            "html": f"<h1 class='doc-section'>{valor.get('html', '')}</h1>",
+            "texto": valor.get("texto", ""),
+            "valor": valor,
+        }
+    if lado_izq == "DocStmt" and lado_der == ["paragraph", "(", "Expr", ")"]:
+        valor = hijos[2]
+        return {
+            "tipo": "stmt",
+            "html": f"<p class='doc-paragraph'>{valor.get('html', '')}</p>",
+            "texto": valor.get("texto", ""),
+            "valor": valor,
+        }
+    if lado_izq == "DocStmt" and lado_der == ["itemize", "(", "ItemList", ")"]:
+        return {
+            "tipo": "stmt",
+            "html": f"<ul class='doc-list'>{hijos[2].get('html', '')}</ul>",
+            "texto": hijos[2].get("texto", ""),
+            "valor": hijos[2],
+        }
+    if lado_izq == "Expr":
+        partes = [hijos[0]] + hijos[1].get("items", [])
+        texto = "".join(parte.get("texto", "") for parte in partes)
+        html = "".join(parte.get("html", "") for parte in partes)
+        return crear_valor(texto, html)
+    if lado_izq == "ExprTail" and lado_der == ["+", "Term", "ExprTail"]:
+        return {"tipo": "tail", "items": [hijos[1]] + hijos[2].get("items", [])}
+    if lado_izq == "ExprTail" and not lado_der:
+        return {"tipo": "tail", "items": []}
+    if lado_izq == "Term":
+        return hijos[0]
+    if lado_izq == "Factor" and lado_der == ["FuncCall"]:
+        return hijos[0]
+    if lado_izq == "Factor" and lado_der == ["Literal"]:
+        return hijos[0]
+    if lado_izq == "Factor" and lado_der == ["ID"]:
+        nombre = hijos[0].get("lexema", hijos[0].get("texto", ""))
+        return resolver_identificador(nombre, contexto)
+    if lado_izq == "Factor" and lado_der == ["(", "Expr", ")"]:
+        return hijos[1]
+    if lado_izq == "FuncCall" and lado_der == ["FunctionName", "(", "Expr", ")"]:
+        nombre_funcion = hijos[0].get("nombre", "")
+        return aplicar_funcion_documento(nombre_funcion, hijos[2])
+    if lado_izq == "FuncCall" and lado_der == ["color", "(", "Expr", ",", "Expr", ")"]:
+        return aplicar_color_documento(hijos[2], hijos[4])
+    if lado_izq == "FunctionName":
+        nombre = hijos[0].get("lexema", hijos[0].get("texto", ""))
+        return {"tipo": "function", "nombre": nombre}
+    if lado_izq == "Literal" and lado_der == ["STRING"]:
+        texto = desescapar_literal_string(hijos[0].get("lexema", ""))
+        return crear_valor(texto, escape_html(texto))
+    if lado_izq == "Literal" and lado_der == ["NUMBER"]:
+        texto = hijos[0].get("lexema", hijos[0].get("texto", ""))
+        return crear_valor(texto, escape_html(texto))
+    if lado_izq == "ItemList" and lado_der == ["item", "(", "Expr", ")", "ItemTail"]:
+        valor = hijos[2]
+        resto = hijos[4].get("items", [])
+        items = [valor] + resto
+        html = "".join(f"<li>{item.get('html', '')}</li>" for item in items)
+        texto = "\n".join(item.get("texto", "") for item in items)
+        return {"tipo": "items", "items": items, "html": html, "texto": texto}
+    if lado_izq == "ItemTail" and lado_der == [",", "item", "(", "Expr", ")", "ItemTail"]:
+        return {"tipo": "itemtail", "items": [hijos[3]] + hijos[5].get("items", [])}
+    if lado_izq == "ItemTail" and not lado_der:
+        return {"tipo": "itemtail", "items": []}
+
+    if hijos:
+        return hijos[0]
+    return crear_valor("")
+
+
 def closure(items, producciones_por_nt, no_terminales, first):
 
     cerradura = set(items)
@@ -498,16 +840,113 @@ def construir_tabla_lr1(
     return action, goto, conflictos
 
 
-def parsear_lr1(action, goto, producciones, tokens):
+def ordenar_no_terminales_recuperacion(no_terminales):
+
+    prioridad = [
+        "StmtList",
+        "Stmt",
+        "DocStmt",
+        "Expr",
+        "ExprTail",
+        "Term",
+        "Factor",
+        "FuncCall",
+        "Literal",
+        "ItemList",
+        "ItemTail",
+        "Program",
+    ]
+
+    ordenados = [nt for nt in prioridad if nt in no_terminales]
+    ordenados.extend(nt for nt in no_terminales if nt not in ordenados)
+    return ordenados
+
+
+def recuperar_en_parser_lr1(
+    pila_estados,
+    pila_simbolos,
+    pila_nodos,
+    pila_semantica,
+    goto,
+    entrada,
+    indice_entrada,
+    no_terminales_recuperacion,
+    sincronizacion_por_nt,
+):
+
+    while pila_estados:
+        estado_actual = pila_estados[-1]
+
+        for no_terminal in no_terminales_recuperacion:
+            estado_destino = goto.get((estado_actual, no_terminal))
+            if estado_destino is None:
+                continue
+
+            sincronizadores = sincronizacion_por_nt.get(no_terminal, {EOF})
+            while (
+                indice_entrada < len(entrada)
+                and entrada[indice_entrada] not in sincronizadores
+                and entrada[indice_entrada] != EOF
+            ):
+                indice_entrada += 1
+
+            pila_simbolos.append(no_terminal)
+            pila_estados.append(estado_destino)
+            pila_nodos.append(NodoParseo(no_terminal, [NodoParseo("<error>", [])]))
+            pila_semantica.append(
+                crear_valor(
+                    "",
+                    "<span class='identifier unresolved'>&lt;error&gt;</span>",
+                    extra={"error": True},
+                )
+            )
+
+            return {
+                "recuperado": True,
+                "indice_entrada": indice_entrada,
+                "no_terminal": no_terminal,
+                "sincronizadores": sorted(list(sincronizadores)),
+                "estado_destino": estado_destino,
+            }
+
+        pila_estados.pop()
+        if pila_simbolos:
+            pila_simbolos.pop()
+        if pila_nodos:
+            pila_nodos.pop()
+        if pila_semantica:
+            pila_semantica.pop()
+
+    return {
+        "recuperado": False,
+        "indice_entrada": indice_entrada,
+        "no_terminal": None,
+        "sincronizadores": [],
+        "estado_destino": None,
+    }
+
+
+def parsear_lr1(
+    action,
+    goto,
+    producciones,
+    tokens,
+    tokens_semanticos=None,
+    no_terminales_recuperacion=None,
+    sincronizacion_por_nt=None,
+):
 
     entrada = list(tokens) + [EOF]
+    tokens_semanticos = list(tokens_semanticos or [])
     pila_estados = [0]
     pila_simbolos = []
     pila_nodos = []
+    pila_semantica = []
     historial = []
     errores = []
     recuperado = False
     indice_entrada = 0
+    contexto_traduccion = crear_contexto_traduccion()
 
     while True:
         estado = pila_estados[-1]
@@ -524,26 +963,18 @@ def parsear_lr1(action, goto, producciones, tokens):
         )
 
         if accion is None:
-            # Registro del error
             mensaje = f"No hay accion para estado {estado} con simbolo {token_actual}"
-            errores.append({
-                "tipo": "no_action",
-                "estado": estado,
-                "token": token_actual,
-                "mensaje": mensaje,
-                "indice_entrada": indice_entrada,
-            })
+            errores.append(
+                {
+                    "tipo": "no_action",
+                    "estado": estado,
+                    "token": token_actual,
+                    "mensaje": mensaje,
+                    "indice_entrada": indice_entrada,
+                }
+            )
 
-            # Intento avanzado de recuperación:
-            # 1) buscar el índice del siguiente punto de sincronizacion (';' o EOF)
-            sync_index = None
-            for i in range(indice_entrada, len(entrada)):
-                if entrada[i] == ';' or entrada[i] == EOF:
-                    sync_index = i
-                    break
-
-            if sync_index is None:
-                # no hay punto de sincronizacion; no podemos recuperar
+            if not no_terminales_recuperacion or not sincronizacion_por_nt:
                 return {
                     "aceptada": False,
                     "error": mensaje,
@@ -551,72 +982,40 @@ def parsear_lr1(action, goto, producciones, tokens):
                     "arbol": None,
                     "errores": errores,
                     "recuperado": recuperado,
+                    "traduccion": construir_documento_traducido(
+                        {"items": []},
+                        contexto_traduccion,
+                    ),
                 }
 
-            # 2) Intentar encontrar un estado en la pila que tenga una ACTION para ';'
-            found_state = False
-            target_len = len(pila_estados)
-            # simulamos pop hasta encontrar action[(estado, ';')]
-            while target_len > 0:
-                st = pila_estados[target_len - 1]
-                if action.get((st, ';')) is not None:
-                    found_state = True
-                    break
-                target_len -= 1
+            resultado_recuperacion = recuperar_en_parser_lr1(
+                pila_estados,
+                pila_simbolos,
+                pila_nodos,
+                pila_semantica,
+                goto,
+                entrada,
+                indice_entrada,
+                no_terminales_recuperacion,
+                sincronizacion_por_nt,
+            )
 
-            if found_state:
-                # Hacemos pop real hasta target_len
-                pops = len(pila_estados) - target_len
-                for _ in range(pops):
-                    if pila_simbolos:
-                        pila_simbolos.pop()
-                    if pila_nodos:
-                        pila_nodos.pop()
-                    pila_estados.pop()
-
-                # consumir tokens hasta el sincronizador (pero sin consumir el ';' aún)
-                for _ in range(indice_entrada, sync_index):
-                    indice_entrada += 1
-
-                # ahora hay una ACTION posible para ';' en estado pila_estados[-1]
-                accion_sync = action.get((pila_estados[-1], entrada[indice_entrada]))
-                if accion_sync is None:
-                    # fallback: si por alguna razon no hay accion, hacer el comportamiento antiguo
-                    indice_entrada = sync_index + (1 if entrada[sync_index] == ';' else 0)
-                    recuperado = True
-                    pila_estados = [0]
-                    pila_simbolos = []
-                    pila_nodos = []
-                    historial.append({
+            if resultado_recuperacion["recuperado"]:
+                recuperado = True
+                indice_entrada = resultado_recuperacion["indice_entrada"]
+                historial.append(
+                    {
                         "info": "recuperacion",
-                        "mensaje": f"Se consumo entrada hasta ';' y se reinicio el parser. Error: {mensaje}",
-                    })
-                    continue
-
-                # registrar que recuperamos desde el error
-                recuperado = True
-                historial.append({
-                    "info": "recuperacion",
-                    "mensaje": f"Se hizo pop hasta estado con accion para ';' y se avanzo al sincronizador. Error: {mensaje}",
-                })
-
-                # no consumimos el ';' aquí explícitamente; dejaremos que el bucle procese la accion_sync
-                continue
-
-            # Si no encontramos un estado con ACTION para ';', fallback al comportamiento anterior:
-            while indice_entrada < len(entrada) and entrada[indice_entrada] not in [';', EOF]:
-                indice_entrada += 1
-
-            if indice_entrada < len(entrada) and entrada[indice_entrada] == ';':
-                indice_entrada += 1
-                recuperado = True
-                pila_estados = [0]
-                pila_simbolos = []
-                pila_nodos = []
-                historial.append({
-                    "info": "recuperacion",
-                    "mensaje": f"Se consumo entrada hasta ';' y se reinicio el parser. Error: {mensaje}",
-                })
+                        "mensaje": (
+                            f"Se recupero con el no terminal "
+                            f"{resultado_recuperacion['no_terminal']} "
+                            f"hacia el estado {resultado_recuperacion['estado_destino']} "
+                            f"sincronizando con "
+                            f"{resultado_recuperacion['sincronizadores']}. "
+                            f"Error: {mensaje}"
+                        ),
+                    }
+                )
                 continue
 
             return {
@@ -626,6 +1025,10 @@ def parsear_lr1(action, goto, producciones, tokens):
                 "arbol": None,
                 "errores": errores,
                 "recuperado": recuperado,
+                "traduccion": construir_documento_traducido(
+                    {"items": []},
+                    contexto_traduccion,
+                ),
             }
 
         if accion[0] == "shift":
@@ -633,6 +1036,10 @@ def parsear_lr1(action, goto, producciones, tokens):
             pila_simbolos.append(token_actual)
             pila_estados.append(destino)
             pila_nodos.append(NodoParseo(token_actual, []))
+            if indice_entrada < len(tokens_semanticos):
+                pila_semantica.append(crear_token_semantico(tokens_semanticos[indice_entrada]))
+            else:
+                pila_semantica.append(crear_token_semantico(token_actual))
             indice_entrada += 1
             continue
 
@@ -642,16 +1049,27 @@ def parsear_lr1(action, goto, producciones, tokens):
             cantidad = len(lado_der)
 
             hijos = []
+            hijos_semanticos = []
             for _ in range(cantidad):
                 pila_simbolos.pop()
                 pila_estados.pop()
                 hijos.append(pila_nodos.pop())
+                hijos_semanticos.append(pila_semantica.pop())
 
             hijos.reverse()
+            hijos_semanticos.reverse()
             if not lado_der:
                 hijos = [NodoParseo(EPSILON, [])]
+                hijos_semanticos = []
 
             nuevo_nodo = NodoParseo(lado_izq, hijos)
+            valor_semantico = aplicar_accion_semantica(
+                indice_produccion,
+                lado_izq,
+                lado_der,
+                hijos_semanticos,
+                contexto_traduccion,
+            )
             estado_destino = goto.get((pila_estados[-1], lado_izq))
 
             if estado_destino is None:
@@ -660,20 +1078,34 @@ def parsear_lr1(action, goto, producciones, tokens):
                     "error": f"No hay goto para estado {pila_estados[-1]} con simbolo {lado_izq}",
                     "pasos": historial,
                     "arbol": None,
+                    "errores": errores,
+                    "recuperado": recuperado,
+                    "traduccion": construir_documento_traducido(
+                        {"items": []},
+                        contexto_traduccion,
+                    ),
                 }
 
             pila_simbolos.append(lado_izq)
             pila_estados.append(estado_destino)
             pila_nodos.append(nuevo_nodo)
+            pila_semantica.append(valor_semantico)
             continue
 
         if accion[0] == "accept":
             raiz = pila_nodos[-1] if pila_nodos else None
+            programa = pila_semantica[-1] if pila_semantica else {"items": []}
             return {
                 "aceptada": True,
                 "error": None,
                 "pasos": historial,
                 "arbol": raiz.a_dict() if raiz else None,
+                "errores": errores,
+                "recuperado": recuperado,
+                "traduccion": construir_documento_traducido(
+                    programa if isinstance(programa, dict) else {"items": []},
+                    contexto_traduccion,
+                ),
             }
 
 
@@ -863,6 +1295,7 @@ def construir_demo_lr1_desde_componentes(
     inicial,
     producciones,
     tokens_entrada,
+    tokens_semanticos=None,
     texto_fuente_original=None,
 ):
 
@@ -890,7 +1323,20 @@ def construir_demo_lr1_desde_componentes(
         producciones_aumentadas,
         inicial_aumentado,
     )
-    parseo = parsear_lr1(action, goto, producciones_aumentadas, tokens_entrada)
+    no_terminales_recuperacion = ordenar_no_terminales_recuperacion(no_terminales)
+    sincronizacion_por_nt = {
+        nt: set(follow.get(nt, {EOF})) | {EOF}
+        for nt in no_terminales_recuperacion
+    }
+    parseo = parsear_lr1(
+        action,
+        goto,
+        producciones_aumentadas,
+        tokens_entrada,
+        tokens_semanticos,
+        no_terminales_recuperacion,
+        sincronizacion_por_nt,
+    )
 
     return {
         "gramatica": {
@@ -933,6 +1379,14 @@ def construir_demo_lr1_desde_componentes(
             for clave, vieja, nueva in conflictos
         ],
         "parseo": parseo,
+        "traduccion": parseo.get("traduccion", {}),
+        "panic_mode": {
+            "no_terminales_recuperacion": no_terminales_recuperacion,
+            "sincronizacion_por_nt": {
+                nt: sorted(list(simbolos))
+                for nt, simbolos in sincronizacion_por_nt.items()
+            },
+        },
         "scanner": {
             "fuente": "",
             "tokens": [],
@@ -968,6 +1422,7 @@ def construir_demo_lr1_desde_componentes_con_scanner(
         inicial,
         producciones,
         tokens_parser,
+        tokens_scanner,
         texto_fuente_original,
     )
 
@@ -1034,7 +1489,7 @@ def imprimir_resumen_demo(datos):
 if __name__ == "__main__":
     demo = construir_demo_lr1_desde_fuente(
         "gramatica.txt",
-        'resultado = color("Rojo") + upper(nombre)',
+        'titulo = upper("Mini Latex"); section(titulo); paragraph("Hola " + color("verde", "mundo") + "."); itemize(item("uno"), item(color("verde", "dos")));',
     )
     imprimir_resumen_demo(demo)
     print("\nJSON:")

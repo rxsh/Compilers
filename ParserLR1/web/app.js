@@ -10,6 +10,8 @@ const maxStepsInput = document.getElementById("maxStepsInput");
 const treeRoot = document.getElementById("treeRoot");
 const treeLeftBtn = document.getElementById("treeLeftBtn");
 const treeRightBtn = document.getElementById("treeRightBtn");
+const exportPdfBtn = document.getElementById("exportPdfBtn");
+const translationFrame = document.getElementById("translationFrame");
 
 let currentData = null;
 let isDraggingTree = false;
@@ -30,6 +32,27 @@ treeLeftBtn.addEventListener("click", () => {
 
 treeRightBtn.addEventListener("click", () => {
   treeRoot.scrollBy({ left: 220, behavior: "smooth" });
+});
+
+exportPdfBtn.addEventListener("click", () => {
+  if (!currentData?.traduccion?.html_documento) {
+    alert("Todavía no hay un documento traducido para exportar.");
+    return;
+  }
+
+  const printWindow = window.open("", "_blank", "width=1024,height=768");
+  if (!printWindow) {
+    alert("No se pudo abrir la ventana de impresión.");
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(currentData.traduccion.html_documento);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 250);
 });
 
 treeRoot.addEventListener("mousedown", (event) => {
@@ -117,6 +140,7 @@ function renderData(data) {
   renderScanner(currentData.scanner || {});
   renderTrace(currentData.parseo || {});
   renderTree(currentData.parseo ? currentData.parseo.arbol : null);
+  renderTranslation(currentData.traduccion || {});
   sourceInput.value = currentData.scanner?.fuente || "";
   loadedInput.textContent = (currentData.entrada_lexica || []).join(" ");
   renderConflicts(currentData.conflictos || []);
@@ -389,6 +413,15 @@ function renderTree(node) {
   }
 
   treeRoot.appendChild(buildTreeNode(node));
+}
+
+function renderTranslation(traduccion) {
+  if (!traduccion || !traduccion.html_documento) {
+    translationFrame.srcdoc = "<p style='font-family: sans-serif; padding: 16px'>No hay traducción disponible.</p>";
+    return;
+  }
+
+  translationFrame.srcdoc = traduccion.html_documento;
 }
 
 function escapeHtml(text) {

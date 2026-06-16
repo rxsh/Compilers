@@ -78,7 +78,7 @@
         <div class="parser-controls">
           <div class="field source-field">
             <label for="sourceInput">Source input</label>
-            <textarea id="sourceInput" spellcheck="false" placeholder='resultado = color("Rojo") + upper(nombre)'></textarea>
+            <textarea id="sourceInput" spellcheck="false" placeholder='section("Introducción"); paragraph("Hola " + color("verde", "mundo verde")); itemize(item("uno"), item(color("azul", "dos")));'></textarea>
           </div>
           <div class="field small">
             <label for="maxStepsInput">Maximum number of steps</label>
@@ -95,6 +95,9 @@
           <div class="input-preview">
             <strong>Tokens al parser:</strong>
             <span id="loadedInput"></span>
+          </div>
+          <div class="translation-actions">
+            <button id="exportPdfBtn" type="button">Exportar PDF</button>
           </div>
         </div>
 
@@ -133,6 +136,18 @@
       </div>
       <div class="table-wrap">
         <div id="treeRoot" class="tree-root" tabindex="0" title="Usa arrastre, rueda o flechas izquierda/derecha"></div>
+      </div>
+    </section>
+
+    <section class="panel translation-panel">
+      <div class="panel-title-row">
+        <h2>Salida Traducida</h2>
+        <span class="mini-tag">Acciones ad hoc</span>
+      </div>
+      <div class="translation-grid">
+        <div class="translation-frame-wrap">
+          <iframe id="translationFrame" title="Vista previa del documento traducido"></iframe>
+        </div>
       </div>
     </section>
   </div>

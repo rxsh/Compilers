@@ -41,7 +41,7 @@ class LR1RequestHandler(BaseHTTPRequestHandler):
         try:
             datos = construir_demo_lr1_desde_fuente(
                 str(GRAMMAR_FILE),
-                'resultado = color("Rojo") + upper(nombre)',
+                'titulo = upper("Mini Latex"); section(titulo); paragraph("Hola " + bold("mundo") + " desde el parser LR(1)."); itemize(item("Primer punto"), item(color("verde", "texto en verde")), item(italic("tercer punto")));',
             )
             self.send_json(datos)
         except Exception as exc:

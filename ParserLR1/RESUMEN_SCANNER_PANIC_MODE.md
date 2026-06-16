@@ -190,12 +190,40 @@ Eso esta bien para un proyecto academico, pero no es una recuperacion sofisticad
 ### 2. Parser y scanner recuperan por separado
 
 El scanner tiene recuperacion lexica.
-El parser en `parser.py` tambien tiene una recuperacion sintactica propia con `;` y `EOF`.
+El parser en `parser.py` ahora tiene recuperacion sintactica tipo panic mode basada en no terminales de recuperacion y tokens sincronizadores.
 
-Eso esta bien conceptualmente, pero conviene explicarlo como dos niveles distintos:
+Eso esta bien conceptualmente, y conviene explicarlo como dos niveles distintos:
 
 - recuperacion lexica
 - recuperacion sintactica
+
+### 3. Panic mode del parser LR(1)
+
+Cuando ocurre un error sintactico, el parser hace esto:
+
+1. detecta que `ACTION[estado, token]` no existe
+2. registra el error
+3. hace pop de la pila hasta encontrar un estado que tenga `goto` con algun no terminal de recuperacion
+4. elige ese no terminal como punto de reinicio
+5. descarta tokens de entrada hasta encontrar un token sincronizador
+6. inserta un nodo artificial `"<error>"` dentro del arbol
+7. continua el analisis desde ese punto
+
+Los tokens sincronizadores se construyen con `FOLLOW(no_terminal) ∪ {$}`.
+
+En esta gramatica, los no terminales de recuperacion priorizados son:
+
+- `StmtList`
+- `Stmt`
+- `Expr`
+- `ExprTail`
+- `Term`
+- `Factor`
+- `FuncCall`
+- `Literal`
+- `Program`
+
+Eso ya responde mejor a la idea clasica de panic mode que suelen pedir en clase para un parser LR(1).
 
 ---
 
@@ -212,9 +240,10 @@ Eso esta bien conceptualmente, pero conviene explicarlo como dos niveles distint
 
 ### Lo que conviene matizar
 
-- El scanner tiene panic mode basico y funcional
-- En strings invalidos ahora el token se descarta por completo
-- La estrategia de recuperacion sigue siendo simple, pero correcta para este nivel
+- El scanner tiene panic mode lexico basico y funcional
+- El parser tiene panic mode sintactico mas cercano al esquema academico LR
+- En strings invalidos el token se descarta por completo
+- La estrategia sigue siendo simple, pero ahora esta mejor alineada con la teoria
 
 ---
 
@@ -222,4 +251,4 @@ Eso esta bien conceptualmente, pero conviene explicarlo como dos niveles distint
 
 Puedes decirlo asi:
 
-> El scanner implementa una recuperacion de errores tipo panic mode basica: cuando encuentra una secuencia invalida, reporta el error, descarta el token o la parte problematica y avanza hasta un punto donde puede reiniciar el escaneo. En el caso de strings mal formados, ahora descarta el literal completo antes de continuar.
+> El sistema usa dos niveles de recuperacion. El scanner recupera errores lexicos descartando el token invalido hasta un punto seguro. El parser LR(1) recupera errores sintacticos cuando no existe `ACTION[estado, token]`: hace pop de pila hasta un estado util, elige un no terminal de recuperacion, descarta entrada hasta un token de `FOLLOW` y continua desde ahi.

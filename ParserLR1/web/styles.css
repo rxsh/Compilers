@@ -263,10 +263,18 @@ th {
   font-weight: 700;
 }
 
+#exportPdfBtn {
+  background: #8a5a14;
+  border-color: #8a5a14;
+  color: white;
+  font-weight: 700;
+}
+
 .parser-status-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 4px 8px 10px;
 }
@@ -380,6 +388,33 @@ th {
   margin-top: 12px;
 }
 
+.translation-panel {
+  grid-column: 1 / -1;
+  margin-top: 12px;
+}
+
+.translation-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 10px;
+}
+
+.translation-frame-wrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  min-height: 520px;
+}
+
+#translationFrame {
+  width: 100%;
+  min-height: 520px;
+  border: 0;
+  background: white;
+}
+
 /* Highlight parser trace row that was affected by panic-mode recovery */
 .panic-row td {
   background: #fff0f0;
@@ -451,7 +486,8 @@ th {
   .workspace-top,
   .workspace-bottom,
   .parser-controls,
-  .parser-results {
+  .parser-results,
+  .translation-grid {
     grid-template-columns: 1fr;
   }
 

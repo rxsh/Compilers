@@ -2,11 +2,22 @@ from dataclasses import dataclass, asdict
 
 
 EOF = "$"
-KEYWORDS = {"bold", "italic", "color", "upper", "lower"}
+KEYWORDS = {
+    "bold",
+    "italic",
+    "color",
+    "upper",
+    "lower",
+    "section",
+    "paragraph",
+    "itemize",
+    "item",
+}
 SINGLE_CHAR_TOKENS = {
     "=": "=",
     "+": "+",
     ";": ";",
+    ",": ",",
     "(": "(",
     ")": ")",
 }

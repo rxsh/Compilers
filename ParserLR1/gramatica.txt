@@ -1,21 +1,17 @@
-# Terminales
-TERMINALES: ID STRING NUMBER = + ; ( ) bold italic color upper lower
-
-# No terminales
-NO_TERMINALES: Program StmtList Stmt Expr ExprTail Term Factor FuncCall FunctionName Literal
-
-# Simbolo inicial
+TERMINALES: ID STRING NUMBER = + ; , ( ) bold italic color upper lower section paragraph itemize item
+NO_TERMINALES: Program StmtList Stmt DocStmt Expr ExprTail Term Factor FuncCall FunctionName Literal ItemList ItemTail
 INICIAL: Program
-
-# Producciones
 PRODUCCIONES:
 Program -> StmtList
 StmtList -> Stmt ; StmtList | Stmt
-Stmt -> ID = Expr | Expr
+Stmt -> ID = Expr | DocStmt
+DocStmt -> section ( Expr ) | paragraph ( Expr ) | itemize ( ItemList )
 Expr -> Term ExprTail
 ExprTail -> + Term ExprTail | ε
 Term -> Factor
 Factor -> FuncCall | Literal | ID | ( Expr )
-FuncCall -> FunctionName ( Expr )
-FunctionName -> bold | italic | color | upper | lower
+FuncCall -> FunctionName ( Expr ) | color ( Expr , Expr )
+FunctionName -> bold | italic | upper | lower
 Literal -> STRING | NUMBER
+ItemList -> item ( Expr ) ItemTail
+ItemTail -> , item ( Expr ) ItemTail | ε
