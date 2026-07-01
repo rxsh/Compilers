@@ -141,6 +141,7 @@ function renderData(data) {
   renderTrace(currentData.parseo || {});
   renderTree(currentData.parseo ? currentData.parseo.arbol : null);
   renderTranslation(currentData.traduccion || {});
+  renderAllErrors(currentData);
   sourceInput.value = currentData.scanner?.fuente || "";
   loadedInput.textContent = (currentData.entrada_lexica || []).join(" ");
   renderConflicts(currentData.conflictos || []);
@@ -334,6 +335,43 @@ function renderScanner(scanner) {
   debugBox.textContent = traceLines.join("\n");
 }
 
+function renderAllErrors(data) {
+  const box = document.getElementById("allErrorsBox");
+  const scannerErrors = data?.scanner?.errores || [];
+  const parserErrors = data?.parseo?.errores || [];
+
+  const sections = [];
+  if (scannerErrors.length) {
+    sections.push(
+      `<strong>Scanner (${scannerErrors.length})</strong><br>` +
+        scannerErrors
+          .map((error) => `L${error.linea}:C${error.columna} - ${escapeHtml(error.mensaje)}`)
+          .join("<br>")
+    );
+  }
+
+  if (parserErrors.length) {
+    sections.push(
+      `<strong>Parser (${parserErrors.length})</strong><br>` +
+        parserErrors
+          .map((error) => {
+            const lugar = error.indice_entrada !== undefined ? `pos ${error.indice_entrada}` : `estado ${error.estado ?? "?"}`;
+            return `${lugar} - ${escapeHtml(error.mensaje || "Error sintáctico")}`;
+          })
+          .join("<br>")
+    );
+  }
+
+  if (!sections.length) {
+    box.classList.add("hidden");
+    box.textContent = "";
+    return;
+  }
+
+  box.classList.remove("hidden");
+  box.innerHTML = sections.join("<hr>");
+}
+
 function renderTrace(parseo) {
   const status = document.getElementById("parseStatus");
   const table = document.getElementById("traceTable");
@@ -345,10 +383,11 @@ function renderTrace(parseo) {
     return;
   }
 
+  const errorCount = (parseo.errores || []).length;
   status.className = `status-chip ${parseo.aceptada ? "ok" : "err"}`;
   status.textContent = parseo.aceptada
-    ? "Cadena aceptada"
-    : `Cadena rechazada: ${parseo.error || "error desconocido"}`;
+    ? `Cadena aceptada${errorCount ? ` con ${errorCount} error(es)` : ""}`
+    : `Cadena rechazada: ${parseo.error || "error desconocido"}${errorCount ? ` (${errorCount} error(es))` : ""}`;
 
   const thead = document.createElement("thead");
   thead.innerHTML = `

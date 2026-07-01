@@ -359,6 +359,13 @@ th {
   margin-bottom: 0;
 }
 
+.errors-panel {
+  margin: 0 8px 10px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 .hidden {
   display: none;
 }
