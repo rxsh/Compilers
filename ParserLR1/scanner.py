@@ -92,7 +92,7 @@ class Scanner:
         self.errores.append(ScannerError(mensaje, linea, columna))
         self.agregar_traza("error", mensaje, linea, columna)
 
-    def descartar_hasta_fin_de_literal(self):
+    def descartar_hasta_fin(self):
         while True:
             ch = self.peekchar()
             if ch is None:
@@ -209,7 +209,7 @@ class Scanner:
                         self.columna,
                     )
                     lexema.append(self.getchar())
-                    self.descartar_hasta_fin_de_literal()
+                    self.descartar_hasta_fin()
                     return None
                 lexema.append(self.getchar())
                 contenido.append(VALID_ESCAPES[escape])
@@ -223,7 +223,7 @@ class Scanner:
                     linea,
                     columna,
                 )
-                self.descartar_hasta_fin_de_literal()
+                self.descartar_hasta_fin()
                 return None
 
         token = Token("STRING", "".join(lexema), linea, columna)

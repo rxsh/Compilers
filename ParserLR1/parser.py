@@ -610,6 +610,8 @@ def aplicar_accion_semantica(indice_produccion, lado_izq, lado_der, hijos, conte
         return {"tipo": "program", "items": hijos[0].get("items", [])}
     if lado_izq == "StmtList" and lado_der == ["Stmt", ";", "StmtList"]:
         return {"tipo": "stmtlist", "items": [hijos[0]] + hijos[2].get("items", [])}
+    if lado_izq == "StmtList" and lado_der == ["Stmt", ";"]:
+        return {"tipo": "stmtlist", "items": [hijos[0]]}
     if lado_izq == "StmtList" and lado_der == ["Stmt"]:
         return {"tipo": "stmtlist", "items": [hijos[0]]}
     if lado_izq == "Stmt" and lado_der == ["ID", "=", "Expr"]:
@@ -947,8 +949,36 @@ def parsear_lr1(
     recuperado = False
     indice_entrada = 0
     contexto_traduccion = crear_contexto_traduccion()
+    limite_iteraciones = max(200, len(entrada) * 20)
+    iteraciones = 0
+    ultimo_error_clave = None
 
     while True:
+        iteraciones += 1
+        if iteraciones > limite_iteraciones:
+            mensaje = "Se detuvo el parseo por exceso de recuperaciones sin progreso"
+            errores.append(
+                {
+                    "tipo": "recovery_limit",
+                    "estado": pila_estados[-1],
+                    "token": entrada[indice_entrada],
+                    "mensaje": mensaje,
+                    "indice_entrada": indice_entrada,
+                }
+            )
+            return {
+                "aceptada": False,
+                "error": mensaje,
+                "pasos": historial,
+                "arbol": None,
+                "errores": errores,
+                "recuperado": recuperado,
+                "traduccion": construir_documento_traducido(
+                    {"items": []},
+                    contexto_traduccion,
+                ),
+            }
+
         estado = pila_estados[-1]
         token_actual = entrada[indice_entrada]
         accion = action.get((estado, token_actual))
@@ -964,6 +994,7 @@ def parsear_lr1(
 
         if accion is None:
             mensaje = f"No hay accion para estado {estado} con simbolo {token_actual}"
+            clave_error = (estado, token_actual, indice_entrada)
             errores.append(
                 {
                     "tipo": "no_action",
@@ -973,6 +1004,25 @@ def parsear_lr1(
                     "indice_entrada": indice_entrada,
                 }
             )
+
+            if clave_error == ultimo_error_clave:
+                errores.append(
+                    {
+                        "tipo": "token_descartado",
+                        "estado": estado,
+                        "token": token_actual,
+                        "mensaje": (
+                            f"Se descarto el token '{token_actual}' para evitar repetir "
+                            "el mismo error"
+                        ),
+                        "indice_entrada": indice_entrada,
+                    }
+                )
+                if indice_entrada < len(entrada) - 1:
+                    indice_entrada += 1
+                    ultimo_error_clave = None
+                    recuperado = True
+                    continue
 
             if not no_terminales_recuperacion or not sincronizacion_por_nt:
                 return {
@@ -1002,7 +1052,49 @@ def parsear_lr1(
 
             if resultado_recuperacion["recuperado"]:
                 recuperado = True
-                indice_entrada = resultado_recuperacion["indice_entrada"]
+                indice_recuperacion = resultado_recuperacion["indice_entrada"]
+                ultimo_error_clave = None
+                errores.append(
+                    {
+                        "tipo": "panic_recovery",
+                        "estado": estado,
+                        "token": token_actual,
+                        "mensaje": (
+                            f"Recuperacion usando {resultado_recuperacion['no_terminal']} "
+                            f"y sincronizadores {resultado_recuperacion['sincronizadores']}"
+                        ),
+                        "indice_entrada": indice_entrada,
+                    }
+                )
+                if indice_recuperacion == indice_entrada:
+                    if token_actual == EOF:
+                        return {
+                            "aceptada": False,
+                            "error": mensaje,
+                            "pasos": historial,
+                            "arbol": None,
+                            "errores": errores,
+                            "recuperado": recuperado,
+                            "traduccion": construir_documento_traducido(
+                                {"items": []},
+                                contexto_traduccion,
+                            ),
+                        }
+                    errores.append(
+                        {
+                            "tipo": "token_descartado",
+                            "estado": estado,
+                            "token": token_actual,
+                            "mensaje": (
+                                f"Se descarto el token '{token_actual}' para evitar "
+                                "quedarse en el mismo punto"
+                            ),
+                            "indice_entrada": indice_entrada,
+                        }
+                    )
+                    indice_entrada = min(indice_entrada + 1, len(entrada) - 1)
+                else:
+                    indice_entrada = indice_recuperacion
                 historial.append(
                     {
                         "info": "recuperacion",
@@ -1018,6 +1110,7 @@ def parsear_lr1(
                 )
                 continue
 
+            ultimo_error_clave = clave_error
             return {
                 "aceptada": False,
                 "error": mensaje,
@@ -1041,6 +1134,7 @@ def parsear_lr1(
             else:
                 pila_semantica.append(crear_token_semantico(token_actual))
             indice_entrada += 1
+            ultimo_error_clave = None
             continue
 
         if accion[0] == "reduce":
@@ -1090,9 +1184,11 @@ def parsear_lr1(
             pila_estados.append(estado_destino)
             pila_nodos.append(nuevo_nodo)
             pila_semantica.append(valor_semantico)
+            ultimo_error_clave = None
             continue
 
         if accion[0] == "accept":
+            ultimo_error_clave = None
             raiz = pila_nodos[-1] if pila_nodos else None
             programa = pila_semantica[-1] if pila_semantica else {"items": []}
             return {

@@ -3,7 +3,7 @@ NO_TERMINALES: Program StmtList Stmt DocStmt Expr ExprTail Term Factor FuncCall 
 INICIAL: Program
 PRODUCCIONES:
 Program -> StmtList
-StmtList -> Stmt ; StmtList | Stmt
+StmtList -> Stmt ; StmtList | Stmt ; | Stmt
 Stmt -> ID = Expr | DocStmt
 DocStmt -> section ( Expr ) | paragraph ( Expr ) | itemize ( ItemList )
 Expr -> Term ExprTail
